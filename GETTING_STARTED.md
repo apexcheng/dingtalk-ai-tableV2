@@ -3,8 +3,8 @@
 ## 前置检查清单
 
 - [ ] 安装 `mcporter >= 0.8.1`：`npm install -g mcporter`
-- [ ] 获取钉钉 MCP Server URL（从 https://mcp.dingtalk.com/#/detail?mcpId=9555 获取）
-- [ ] 设置环境变量：`export DINGTALK_MCP_URL='<your-url>'`
+- [ ] 确认当前 agent workspace 的 `config/mcporter.json` 已注册 `dingtalk-ai-table`
+- [ ] 可选：如果要直连 MCP Server，再设置 `DINGTALK_MCP_URL`
 - [ ] 可选：设置 `OPENCLAW_WORKSPACE` 用于脚本文件沙箱
 
 ## 工作流程
@@ -13,10 +13,10 @@
 
 ```bash
 # 列出所有可访问的 Base
-mcporter call "$DINGTALK_MCP_URL" .list_bases limit=10
+mcporter call dingtalk-ai-table list_bases limit=10
 
 # 或按名称搜索
-mcporter call "$DINGTALK_MCP_URL" .search_bases query='销售'
+mcporter call dingtalk-ai-table search_bases query='销售'
 ```
 
 从结果中记下 `baseId`。
@@ -25,10 +25,10 @@ mcporter call "$DINGTALK_MCP_URL" .search_bases query='销售'
 
 ```bash
 # 查看 Base 内的所有表
-mcporter call "$DINGTALK_MCP_URL" .get_base baseId='base_xxx'
+mcporter call dingtalk-ai-table get_base baseId='base_xxx'
 
 # 查看表的字段
-mcporter call "$DINGTALK_MCP_URL" .get_tables \
+mcporter call dingtalk-ai-table get_tables \
   --args '{"baseId":"base_xxx","tableIds":["tbl_xxx"]}'
 ```
 
@@ -38,13 +38,13 @@ mcporter call "$DINGTALK_MCP_URL" .get_tables \
 
 **查询记录**
 ```bash
-mcporter call "$DINGTALK_MCP_URL" .query_records \
+mcporter call dingtalk-ai-table query_records \
   --args '{"baseId":"base_xxx","tableId":"tbl_xxx","limit":100}'
 ```
 
 **新增记录**
 ```bash
-mcporter call "$DINGTALK_MCP_URL" .create_records \
+mcporter call dingtalk-ai-table create_records \
   --args '{
     "baseId":"base_xxx",
     "tableId":"tbl_xxx",
@@ -57,7 +57,7 @@ mcporter call "$DINGTALK_MCP_URL" .create_records \
 
 **更新记录**
 ```bash
-mcporter call "$DINGTALK_MCP_URL" .update_records \
+mcporter call dingtalk-ai-table update_records \
   --args '{
     "baseId":"base_xxx",
     "tableId":"tbl_xxx",
@@ -69,7 +69,7 @@ mcporter call "$DINGTALK_MCP_URL" .update_records \
 
 **删除记录**
 ```bash
-mcporter call "$DINGTALK_MCP_URL" .delete_records \
+mcporter call dingtalk-ai-table delete_records \
   --args '{
     "baseId":"base_xxx",
     "tableId":"tbl_xxx",
@@ -127,3 +127,12 @@ python3 import_records.py base_xxx tbl_xxx data.csv
 - 📖 详细 API 参考：`api-reference.md`
 - 🐛 错误排查：`error-codes.md`
 - 🔒 安全规则：`SKILL.md` 的"安全规则"部分
+
+### 可选直连方式
+
+如果当前环境没有注册 `dingtalk-ai-table`，可以改用直连 URL：
+
+```bash
+export DINGTALK_MCP_URL='<your-url>'
+mcporter call "$DINGTALK_MCP_URL" .list_bases limit=10
+```

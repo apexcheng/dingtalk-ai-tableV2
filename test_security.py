@@ -152,14 +152,14 @@ class TestRecordValidation(unittest.TestCase):
 
 
 class TestSanitizeRecordValue(unittest.TestCase):
-    def test_string_and_number(self):
+    def test_strings_preserved(self):
         self.assertEqual(import_records.sanitize_record_value('hello'), 'hello')
-        self.assertEqual(import_records.sanitize_record_value('123'), 123)
-        self.assertEqual(import_records.sanitize_record_value('123.45'), 123.45)
+        self.assertEqual(import_records.sanitize_record_value('123'), '123')
+        self.assertEqual(import_records.sanitize_record_value('123.45'), '123.45')
 
     def test_bool_and_empty(self):
-        self.assertIs(import_records.sanitize_record_value('true'), True)
-        self.assertIs(import_records.sanitize_record_value('false'), False)
+        self.assertEqual(import_records.sanitize_record_value('true'), 'true')
+        self.assertEqual(import_records.sanitize_record_value('false'), 'false')
         self.assertIsNone(import_records.sanitize_record_value('   '))
         self.assertIsNone(import_records.sanitize_record_value(None))
 
@@ -178,12 +178,13 @@ class TestPayloadBuilders(unittest.TestCase):
     def test_build_create_records_payload(self):
         payload = import_records.build_create_records_payload('base12345', 'table12345', [
             {'cells': {'fldName': '张三', 'fldAge': '25'}},
-            {'fldName': '李四', 'fldActive': 'true'}
+            {'fldName': '李四', 'fldAge': 25, 'fldActive': True}
         ])
         self.assertEqual(payload['baseId'], 'base12345')
         self.assertEqual(payload['tableId'], 'table12345')
-        self.assertEqual(payload['records'][0]['cells']['fldAge'], 25)
-        self.assertEqual(payload['records'][1]['cells']['fldActive'], True)
+        self.assertEqual(payload['records'][0]['cells']['fldAge'], '25')
+        self.assertEqual(payload['records'][1]['cells']['fldAge'], 25)
+        self.assertIs(payload['records'][1]['cells']['fldActive'], True)
 
 
 class TestIntegration(unittest.TestCase):
@@ -213,7 +214,7 @@ class TestIntegration(unittest.TestCase):
         rows = import_records.safe_csv_load(csv_file)
         payload = import_records.build_create_records_payload('base12345', 'table12345', rows)
         self.assertEqual(len(payload['records']), 2)
-        self.assertEqual(payload['records'][0]['cells']['fldAge'], 25)
+        self.assertEqual(payload['records'][0]['cells']['fldAge'], '25')
 
 
 if __name__ == '__main__':

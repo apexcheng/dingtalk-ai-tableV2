@@ -91,7 +91,15 @@ def get_mcporter_version() -> Optional[Tuple[int, int, int]]:
 
 
 def build_mcporter_call(args: List[str]) -> List[str]:
-    cmd = ['mcporter', 'call', 'dingtalk-ai-table']
+    mcp_url = os.environ.get('DINGTALK_MCP_URL')
+    if mcp_url:
+        tool_name = args[0]
+        if not tool_name.startswith('.'):
+            tool_name = f'.{tool_name}'
+        cmd = ['mcporter', 'call', mcp_url]
+        args = [tool_name] + args[1:]
+    else:
+        cmd = ['mcporter', 'call', 'dingtalk-ai-table']
     version = get_mcporter_version()
     if version is not None and version < MCPORTER_TEXT_OUTPUT_CUTOFF:
         cmd.extend(['--output', 'text'])
@@ -121,21 +129,10 @@ def sanitize_record_value(value: Any) -> Optional[Union[str, int, float, bool, l
         return value
     if not isinstance(value, str):
         return value
-    if not value.strip():
-        return None
-
     value = value.strip()
-    if value.lower() == 'true':
-        return True
-    if value.lower() == 'false':
-        return False
-
-    try:
-        if '.' in value:
-            return float(value)
-        return int(value)
-    except ValueError:
-        return value
+    if not value:
+        return None
+    return value
 
 
 def normalize_record(record: Dict[str, Any]) -> Dict[str, Any]:

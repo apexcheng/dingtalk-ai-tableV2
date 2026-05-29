@@ -1,6 +1,6 @@
 ---
 name: dingtalk-ai-table
-description: 钉钉 AI 表格（多维表）操作技能。使用 mcporter CLI 连接钉钉官方新版 AI 表格 MCP server，基于 baseId / tableId / fieldId / recordId 体系执行 Base、Table、Field、Record 的查询与增删改。适用于创建 AI 表格、搜索表格、读取表结构、批量增删改记录、批量建字段、更新字段配置、按模板建表等场景。需要配置 DINGTALK_MCP_URL 或直接使用 Streamable HTTP URL。
+description: 钉钉 AI 表格（多维表）操作技能。使用 mcporter CLI 连接钉钉官方新版 AI 表格 MCP server，基于 baseId / tableId / fieldId / recordId 体系执行 Base、Table、Field、Record 的查询与增删改。适用于创建 AI 表格、搜索表格、读取表结构、批量增删改记录、批量建字段、更新字段配置、按模板建表等场景。默认使用当前 agent workspace 的 mcporter 注册名 dingtalk-ai-table，DINGTALK_MCP_URL 仅作为可选直连兜底。
 version: 0.6.0
 metadata:
   author: Marila@Dingtalk
@@ -15,13 +15,9 @@ metadata:
   support: https://github.com/aliramw/dingtalk-ai-table/issues
   openclaw:
     requires:
-      env:
-        - DINGTALK_MCP_URL
-        - OPENCLAW_WORKSPACE
       bins:
         - mcporter
         - python3
-    primaryEnv: DINGTALK_MCP_URL
     homepage: https://github.com/aliramw/dingtalk-ai-table
 ---
 
@@ -31,23 +27,23 @@ metadata:
 
 ### 1️⃣ 列出我的表格
 ```bash
-mcporter call '<DINGTALK_MCP_URL>' .list_bases limit=5
+mcporter call dingtalk-ai-table list_bases limit=5
 ```
 
 ### 2️⃣ 创建新表格
 ```bash
-mcporter call '<DINGTALK_MCP_URL>' .create_base baseName='我的项目'
+mcporter call dingtalk-ai-table create_base baseName='我的项目'
 ```
 
 ### 3️⃣ 添加记录
 ```bash
-mcporter call '<DINGTALK_MCP_URL>' .create_records \
+mcporter call dingtalk-ai-table create_records \
   --args '{"baseId":"base_xxx","tableId":"tbl_xxx","records":[{"cells":{"fld_name":"张三"}}]}'
 ```
 
 ### 4️⃣ 查询记录
 ```bash
-mcporter call '<DINGTALK_MCP_URL>' .query_records \
+mcporter call dingtalk-ai-table query_records \
   --args '{"baseId":"base_xxx","tableId":"tbl_xxx","limit":10}'
 ```
 
@@ -182,25 +178,25 @@ mcporter --version
 
 ### 配置 MCP Server
 
-在钉钉 MCP 广场 https://mcp.dingtalk.com/#/detail?mcpId=9555&detailType=marketMcpDetail 获取新版钉钉 AI 表格 MCP 的 `Streamable HTTP URL`。
-
-方式一：直接配置到 mcporter
+默认方式是在当前 agent 的 `workspace/config/mcporter.json` 中注册 `dingtalk-ai-table`，然后直接使用：
 
 ```bash
-mcporter config add dingtalk-ai-table --url "<Streamable_HTTP_URL>"
+mcporter call dingtalk-ai-table list_bases limit=10
+mcporter call dingtalk-ai-table query_records --args '{"baseId":"base_xxx","tableId":"tbl_xxx","limit":100}'
 ```
 
-方式二：使用环境变量
+可选直连方式是设置 `DINGTALK_MCP_URL`，然后显式传入 URL：
 
 ```bash
 export DINGTALK_MCP_URL="<Streamable_HTTP_URL>"
+mcporter call "$DINGTALK_MCP_URL" .list_bases limit=10
 ```
 
 > 这个 URL 带访问令牌，等同密码，不要泄露。
 
 ### 工作区沙箱
 
-脚本读取本地文件时，会优先使用 `OPENCLAW_WORKSPACE` 作为允许根目录：
+脚本读取本地文件时，如果设置了 `OPENCLAW_WORKSPACE`，会优先把它作为允许根目录：
 
 ```bash
 export OPENCLAW_WORKSPACE="$HOME/.openclaw/workspace"
