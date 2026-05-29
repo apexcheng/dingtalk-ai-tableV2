@@ -4,19 +4,19 @@
 
 set -e
 
-MCP_URL="${DINGTALK_MCP_URL:-}"
+DIRECT_URL="${DINGTALK_AI_TABLE_DIRECT_URL:-}"
 WORKSPACE="${OPENCLAW_WORKSPACE:-$HOME/.openclaw/workspace}"
 CACHE_DIR="$WORKSPACE/.cache/dingtalk-ai-table"
 
-if [ -n "$MCP_URL" ]; then
-  URL_HASH=$(printf '%s' "$MCP_URL" | shasum -a 256 | cut -d' ' -f1)
+if [ -n "$DIRECT_URL" ]; then
+  URL_HASH=$(printf '%s' "$DIRECT_URL" | shasum -a 256 | cut -d' ' -f1)
 else
   URL_HASH="dingtalk-ai-table"
 fi
 CACHE_FILE="$CACHE_DIR/schema-check-$URL_HASH.json"
 
-if [ -z "$MCP_URL" ]; then
-  echo "ℹ️ 未设置 DINGTALK_MCP_URL，将检查当前 mcporter 注册名 dingtalk-ai-table"
+if [ -z "$DIRECT_URL" ]; then
+  echo "ℹ️ 未设置 DINGTALK_AI_TABLE_DIRECT_URL，将检查当前 mcporter 注册名 dingtalk-ai-table"
 fi
 
 # 如果已检查过且结果为新版，直接跳过
@@ -30,7 +30,11 @@ fi
 
 # 执行检查
 echo "🔍 检查 MCP schema 版本..."
-SCHEMA=$(mcporter list dingtalk-ai-table --schema 2>/dev/null || echo "")
+if [ -n "$DIRECT_URL" ]; then
+  SCHEMA=$(mcporter list "$DIRECT_URL" --schema 2>/dev/null || echo "")
+else
+  SCHEMA=$(mcporter list dingtalk-ai-table --schema 2>/dev/null || echo "")
+fi
 
 if echo "$SCHEMA" | grep -q "list_bases\|get_base\|create_records"; then
   echo "✅ 确认新版 schema"

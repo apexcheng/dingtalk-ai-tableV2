@@ -110,7 +110,7 @@ def safe_csv_load(file_path: Path, max_size: int = MAX_FILE_SIZE) -> List[Record
     file_size = file_path.stat().st_size
     if file_size > max_size:
         raise ValueError(f"文件过大：{file_size:,} 字节 (限制：{max_size:,} 字节)")
-    with open(file_path, 'r', encoding='utf-8', newline='') as f:
+    with open(file_path, 'r', encoding='utf-8-sig', newline='') as f:
         return list(csv.DictReader(f))
 
 

@@ -1,6 +1,6 @@
 # 钉钉 AI 表格 MCP API 参考（2026-03-10 新版）
 
-> 以 MCP server 实际 schema 为准，不再使用旧版 `dentryUuid / sheetIdOrName / fieldIdOrName` 体系。
+> 以 MCP server 实际 schema 为准，使用新版 `baseId / tableId / fieldId / recordId` 体系。
 > 新版核心 ID 体系：`baseId` / `tableId` / `fieldId` / `recordId`。
 
 推荐使用 `mcporter 0.8.1` 及以上版本。
@@ -51,8 +51,8 @@
 ### 2.1 查找 Base
 
 ```bash
-mcporter call '<mcp-url>' .list_bases limit=10
-mcporter call '<mcp-url>' .search_bases query='销售'
+mcporter call dingtalk-ai-table list_bases limit=10
+mcporter call dingtalk-ai-table search_bases query='销售'
 ```
 
 先拿到 `baseId`，后续所有操作都从它出发。
@@ -60,7 +60,7 @@ mcporter call '<mcp-url>' .search_bases query='销售'
 ### 2.2 进入 Base 看目录
 
 ```bash
-mcporter call '<mcp-url>' .get_base baseId='base_xxx'
+mcporter call dingtalk-ai-table get_base baseId='base_xxx'
 ```
 
 从返回结果里先拿 `tableId`；如果只是想知道有哪些表，这一步就够了。
@@ -68,7 +68,7 @@ mcporter call '<mcp-url>' .get_base baseId='base_xxx'
 ### 2.3 看表结构
 
 ```bash
-mcporter call '<mcp-url>' .get_tables \
+mcporter call dingtalk-ai-table get_tables \
   --args '{"baseId":"base_xxx","tableIds":["tbl_xxx"]}'
 ```
 
@@ -81,7 +81,7 @@ mcporter call '<mcp-url>' .get_tables \
 ### 2.4 看字段完整配置
 
 ```bash
-mcporter call '<mcp-url>' .get_fields \
+mcporter call dingtalk-ai-table get_fields \
   --args '{"baseId":"base_xxx","tableId":"tbl_xxx","fieldIds":["fld_xxx"]}'
 ```
 
@@ -90,14 +90,14 @@ mcporter call '<mcp-url>' .get_fields \
 ### 2.5 查记录
 
 ```bash
-mcporter call '<mcp-url>' .query_records \
+mcporter call dingtalk-ai-table query_records \
   --args '{"baseId":"base_xxx","tableId":"tbl_xxx","limit":100}'
 ```
 
 按 recordId 精准取：
 
 ```bash
-mcporter call '<mcp-url>' .query_records \
+mcporter call dingtalk-ai-table query_records \
   --args '{"baseId":"base_xxx","tableId":"tbl_xxx","recordIds":["rec_xxx"]}'
 ```
 
@@ -143,7 +143,7 @@ mcporter call '<mcp-url>' .query_records \
 示例：
 
 ```bash
-mcporter call '<mcp-url>' .create_base baseName='销售日报'
+mcporter call dingtalk-ai-table create_base baseName='销售日报'
 ```
 
 ## 3.5 update_base

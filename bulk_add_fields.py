@@ -103,12 +103,12 @@ def get_mcporter_version() -> Optional[Tuple[int, int, int]]:
 
 
 def build_mcporter_call(args: List[str]) -> List[str]:
-    mcp_url = os.environ.get('DINGTALK_MCP_URL')
-    if mcp_url:
+    direct_url = os.environ.get('DINGTALK_AI_TABLE_DIRECT_URL')
+    if direct_url:
         tool_name = args[0]
         if not tool_name.startswith('.'):
             tool_name = f'.{tool_name}'
-        cmd = ['mcporter', 'call', mcp_url]
+        cmd = ['mcporter', 'call', direct_url]
         args = [tool_name] + args[1:]
     else:
         cmd = ['mcporter', 'call', 'dingtalk-ai-table']
@@ -122,7 +122,7 @@ def safe_json_load(file_path: Path, max_size: int = MAX_FILE_SIZE) -> JsonData:
     file_size = file_path.stat().st_size
     if file_size > max_size:
         raise ValueError(f"文件过大：{file_size:,} 字节 (限制：{max_size:,} 字节)")
-    with open(file_path, 'r', encoding='utf-8') as f:
+    with open(file_path, 'r', encoding='utf-8-sig') as f:
         return json.load(f)
 
 

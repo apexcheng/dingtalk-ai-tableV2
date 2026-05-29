@@ -1,45 +1,23 @@
-# 快速开始指南
+# 快速开始补充
 
-## 前置检查清单
+这里是补充示例，不是核心规则来源。核心约束以仓库根目录的 `SKILL.md` 为准。
 
-- 安装 `mcporter >= 0.8.1`：`npm install -g mcporter`
-- 确认当前 agent workspace 的 `config/mcporter.json` 已注册 `dingtalk-ai-table`
-- 可选：如果要直连 MCP Server，再设置 `DINGTALK_AI_TABLE_DIRECT_URL`
-- 可选：设置 `OPENCLAW_WORKSPACE` 用于脚本文件沙箱
-
-验证：
+## 常见命令
 
 ```bash
-mcporter --version
-```
-
-## 工作流程
-
-### 第 1 步：找到你的表格
-
-```bash
+mcporter list dingtalk-ai-table --schema
 mcporter call dingtalk-ai-table list_bases limit=10
 mcporter call dingtalk-ai-table search_bases query='销售'
-```
-
-从结果中记下 `baseId`。
-
-### 第 2 步：查看表格结构
-
-```bash
 mcporter call dingtalk-ai-table get_base baseId='base_xxx'
 mcporter call dingtalk-ai-table get_tables \
   --args '{"baseId":"base_xxx","tableIds":["tbl_xxx"]}'
+mcporter call dingtalk-ai-table get_fields \
+  --args '{"baseId":"base_xxx","tableId":"tbl_xxx","fieldIds":["fld_xxx"]}'
 ```
 
-从结果中记下 `tableId` 和 `fieldId`。
-
-### 第 3 步：操作数据
+## 常见写入
 
 ```bash
-mcporter call dingtalk-ai-table query_records \
-  --args '{"baseId":"base_xxx","tableId":"tbl_xxx","limit":100}'
-
 mcporter call dingtalk-ai-table create_records \
   --args '{"baseId":"base_xxx","tableId":"tbl_xxx","records":[{"cells":{"fld_name":"张三"}}]}'
 
@@ -50,84 +28,14 @@ mcporter call dingtalk-ai-table delete_records \
   --args '{"baseId":"base_xxx","tableId":"tbl_xxx","recordIds":["rec_xxx","rec_yyy"]}'
 ```
 
-### 第 4 步：批量操作
-
-**批量新增字段**
+## 批量脚本
 
 ```bash
 python3 bulk_add_fields.py base_xxx tbl_xxx fields.json
-```
-
-**批量导入记录**
-
-```bash
 python3 import_records.py base_xxx tbl_xxx data.csv
 ```
 
-## 常见问题
-
-### Q: 参数怎么传？
-
-**A:** 简单参数用 `key=value`，复杂对象 / 数组用 `--args '<json>'`。
-
-### Q: 为什么查不到记录？
-
-**A:** 检查 `fieldId` 是否正确。用 `get_tables` 或 `get_fields` 确认。
-
-### Q: 单选 / 多选字段怎么过滤？
-
-**A:** 必须用 option `id`，不是 name。先 `get_fields` 查完整配置。
-
-### Q: 批量操作有上限吗？
-
-**A:** 有。字段最多 15 个，记录最多 100 条。
-
-## 输出模式
-
-- `mcporter 0.8.1+` 可直接调用
-- 更低版本需要显式加 `--output text`
-- AI 表格 MCP 无论使用哪种模式，返回体本身都是标准 JSON；差异主要在 `mcporter` 的输出处理方式
-
-## 示例数据文件
-
-### fields.json - 批量新增字段示例
-
-```json
-[
-  {"fieldName":"任务名","type":"text"},
-  {"fieldName":"优先级","type":"singleSelect","config":{"options":[{"name":"高"},{"name":"中"},{"name":"低"}]}},
-  {"fieldName":"截止日期","type":"date"},
-  {"fieldName":"负责人","type":"user","config":{"multiple":false}},
-  {"fieldName":"进度","type":"progress"}
-]
-```
-
-### data.csv - 批量导入记录示例
-
-```csv
-fld_name,fld_age,fld_status,fld_salary
-张三,25,进行中,15000
-李四,30,已完成,18000
-王五,28,进行中,16000
-```
-
-### data.json - JSON 格式导入示例
-
-```json
-[
-  {"cells":{"fld_name":"张三","fld_age":25,"fld_status":"进行中","fld_salary":15000}},
-  {"cells":{"fld_name":"李四","fld_age":30,"fld_status":"已完成","fld_salary":18000}}
-]
-```
-
-## 下一步
-
-- 详细 API 参考：`references/api-reference.md`
-- 错误排查：`references/error-codes.md`
-- 版本守门：`docs/version-guard.md`
-- 安全规则：`SKILL.md` 的“安全规则”部分
-
-## 可选直连方式
+## 可选直连
 
 如果当前环境没有注册 `dingtalk-ai-table`，可以改用直连 URL：
 
@@ -135,3 +43,9 @@ fld_name,fld_age,fld_status,fld_salary
 export DINGTALK_AI_TABLE_DIRECT_URL='<your-url>'
 mcporter call "$DINGTALK_AI_TABLE_DIRECT_URL" .list_bases limit=10
 ```
+
+## 更多参考
+
+- API 参考：`references/api-reference.md`
+- 错误排查：`references/error-codes.md`
+- 详细说明：`README.md`

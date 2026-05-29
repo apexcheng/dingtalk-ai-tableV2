@@ -1,7 +1,7 @@
 ---
 name: dingtalk-ai-table
-description: 钉钉 AI 表格（多维表）操作技能。使用 mcporter CLI 连接钉钉官方新版 AI 表格 MCP server，基于 baseId / tableId / fieldId / recordId 体系执行 Base、Table、Field、Record 的查询与增删改。适用于创建 AI 表格、搜索表格、读取表结构、批量增删改记录、批量建字段、更新字段配置、按模板建表等场景。默认使用当前 agent workspace 的 mcporter 注册名 dingtalk-ai-table，`DINGTALK_AI_TABLE_DIRECT_URL` 仅作为可选直连兜底。
-version: 0.6.0
+description: 钉钉 AI 表格（多维表）操作技能。使用 mcporter CLI 连接钉钉官方新版 AI 表格 MCP server，基于 baseId / tableId / fieldId / recordId 体系执行 Base、Table、Field、Record 的查询与增删改。适用于创建 AI 表格、搜索表格、读取表结构、批量增删改记录、批量建字段、更新字段配置、按模板建表等场景。默认使用当前 agent workspace 的 mcporter 注册名 dingtalk-ai-table，DINGTALK_AI_TABLE_DIRECT_URL 仅作为可选直连兜底。
+version: 0.7.0
 metadata:
   author: Marila@Dingtalk
   category: productivity
@@ -23,72 +23,179 @@ metadata:
 
 # 钉钉 AI 表格操作（新版 MCP）
 
-## 🚀 5 分钟快速开始
+## 快速开始
 
-### 1️⃣ 列出我的表格
+### 1. 首次使用先检查 schema
+
+首次调用前，或当 `mcporter` 里注册的 MCP Server 地址变化后，先执行：
+
 ```bash
-mcporter call dingtalk-ai-table list_bases limit=5
+mcporter list dingtalk-ai-table --schema
 ```
 
-### 2️⃣ 创建新表格
-```bash
-mcporter call dingtalk-ai-table create_base baseName='我的项目'
-```
+新版 schema 应包含这些能力：
 
-### 3️⃣ 添加记录
-```bash
-mcporter call dingtalk-ai-table create_records \
-  --args '{"baseId":"base_xxx","tableId":"tbl_xxx","records":[{"cells":{"fld_name":"张三"}}]}'
-```
+- `list_bases`
+- `get_base`
+- `get_tables`
+- `get_fields`
+- `query_records`
+- `create_records`
+- `update_records`
+- `delete_records`
+- `prepare_attachment_upload`
 
-### 4️⃣ 查询记录
-```bash
-mcporter call dingtalk-ai-table query_records \
-  --args '{"baseId":"base_xxx","tableId":"tbl_xxx","limit":10}'
-```
+如果 schema 中出现旧工具名，或者仍然基于旧参数体系，必须停止调用并提示版本不匹配。旧工具名包括：
 
-### 5️⃣ 批量导入
-```bash
-python3 import_records.py base_xxx tbl_xxx data.csv
-```
-
----
+- `get_root_node_of_my_document`
+- `create_base_app`
+- `list_base_tables`
+- `add_base_record`
+- `search_base_record`
+- `list_base_field`
 
 ## 核心概念
 
-按 **新版 MCP schema** 工作：
+按新版 MCP schema 工作：
+
 - Base：`baseId`
 - Table：`tableId`
 - Field：`fieldId`
 - Record：`recordId`
 
-不要再用旧版 `dentryUuid / sheetIdOrName / fieldIdOrName`。
+主示例统一使用：
 
-推荐使用 `mcporter 0.8.1` 及以上版本。
+```bash
+mcporter call dingtalk-ai-table list_bases limit=5
+```
 
-输出模式兼容说明：
-- `mcporter 0.8.1+` 可直接调用
-- 更低版本需要显式加 `--output text`
-- AI 表格 MCP 无论使用哪种模式，返回体本身都是标准 JSON；差异主要在 `mcporter` 的输出处理方式
+不要把直连 URL 示例作为主示例，也不要把旧参数体系当成新 schema 使用。
 
-## 版本守门规则（每个 MCP Server 地址只强制检查一次）
+## 必须遵守的查询规则
 
-在真正开始任何 AI 表格操作前，必须先检查当前 `mcporter` 注册的 `dingtalk-ai-table` MCP server 实际返回的 tools schema。**但这个检查不该每次都重复做；同一个 MCP Server 地址只需要强制检查一次。**
+### 1. 服务端查询限制
 
-- 每个 MCP Server 地址首次使用前，先执行一次 `mcporter list dingtalk-ai-table --schema`。
-- 同一地址如果已经确认是新版 schema，并且地址没有变化，可以跳过重复检查。
-- 如果检查到旧版 schema，先停止使用当前地址，并提示用户更新 MCP Server 配置。
-- 详细检查流程、缓存约定和提示文案见 [docs/version-guard.md](docs/version-guard.md)。
+`query_records` 的服务端语义不保证以下方式可用于稳定批量遍历：
 
-## 配置说明
+- 排序 + 过滤 + cursor 连续翻页
+- 排序 + cursor 连续翻页
+- 过滤 + cursor 连续翻页
 
-- 默认使用当前 agent workspace 里的 `mcporter` 注册名 `dingtalk-ai-table`。
-- 如果需要直连兜底，请使用可选变量 `DINGTALK_AI_TABLE_DIRECT_URL`。
-- 安装、注册、`OPENCLAW_WORKSPACE` 和直连示例见 [docs/getting-started.md](docs/getting-started.md)。
+这不是性能问题，而是服务端不保证稳定语义，可能导致：
 
-## 核心工具集
+- 漏数据
+- 重复数据
+- 顺序不稳定
+- 批量处理结果不可控
+
+因此，Agent 禁止依赖这些方式做大表全量处理。
+
+### 2. 批量处理唯一推荐方式
+
+批量处理只能按这个流程推进：
+
+1. 查询第一页
+2. 处理当前返回记录
+3. 回写辅助标记字段
+4. 下一轮继续查询未标记记录
+
+不要把 `cursor` 当成数据库分页游标使用。
+
+### 3. 辅助标记字段
+
+批量处理必须通过辅助标记字段避免重复读取。
+
+如果表里没有可用辅助字段，Agent 可以自动新增。可用字段名示例：
+
+- `处理标记`
+- `查询标记`
+- `同步标记`
+- `回查标记`
+- `AI处理标记`
+
+辅助字段只用于避免重复读取和模拟稳定分页，不应承载业务含义。
+
+### 4. `filters` 字段规则
+
+`filters` 必须使用 `fieldId`，不能直接使用字段名称，例如 `商品ID`、`日期`、`店铺`。
+
+正确流程是：
+
+1. 先读取字段列表
+2. 找到字段名称对应的 `fieldId`
+3. 用 `fieldId` 构造过滤条件
+
+### 5. 单选 / 多选过滤规则
+
+`singleSelect` / `multipleSelect` 过滤必须使用 option id，不能直接传选项名称。
+
+正确流程是：
+
+1. 读取字段 schema
+2. 找到选项名称对应的 option id
+3. 用 option id 构造过滤条件
+
+### 6. 图片 / 附件字段默认不查
+
+查询记录时，默认只返回非图片 / 非附件字段。
+
+查询前先通过字段列表识别：
+
+- attachment 字段
+- 图片字段
+- 截图字段
+- 凭证字段
+- 其他大附件字段
+
+如果当前 MCP schema 支持指定返回字段，则只传入非图片 / 非附件字段的 `fieldId`。
+
+如果当前 MCP schema 不支持指定返回字段，则查询后只使用非图片 / 非附件字段，并在必要时提示图片 / 附件字段可能导致查询变慢。
+
+### 7. 日期过滤规则
+
+日期过滤优先按日期维度处理，不要依赖小时 / 分钟 / 秒级服务端过滤完成复杂批量任务。
+
+涉及复杂时间判断时，优先查询较小范围，再在 Agent 侧判断。
+
+## 必须遵守的附件规则
+
+### 1. 可靠附件写入流程
+
+附件可靠写入必须使用：
+
+1. `prepare_attachment_upload`
+2. 使用返回的 `uploadUrl` 上传文件
+3. 将返回或准备好的 `fileToken` 写入附件字段
+
+### 2. 不要依赖外链 URL
+
+直接写外链 URL 属于 best-effort 异步链路，不保证立即可读，也不保证稳定成功。
+
+生产任务优先使用 `fileToken`。
+
+### 3. 附件更新会覆盖字段
+
+`update_records` 更新附件字段时，会整体覆盖该字段原有附件。
+
+如果要追加附件，必须：
+
+1. 先读取原附件值
+2. 合并旧附件和新附件
+3. 一起写回
+
+禁止在未合并旧附件的情况下直接写新附件，避免误删已有附件。
+
+## 配置与调用约定
+
+- 默认使用当前 agent workspace 里的 `mcporter` 注册名 `dingtalk-ai-table`
+- 如果需要直连兜底，请使用可选变量 `DINGTALK_AI_TABLE_DIRECT_URL`
+- 主示例统一使用 `mcporter call dingtalk-ai-table <tool_name> ...`
+- 复杂参数一律用 `--args '<json>'`
+
+## 常用工具集
 
 ### 常用数据操作工具
+
 - `get_tables`
 - `get_fields`
 - `query_records`
@@ -98,6 +205,7 @@ python3 import_records.py base_xxx tbl_xxx data.csv
 - `prepare_attachment_upload`
 
 ### 低频管理工具
+
 - `list_bases`
 - `search_bases`
 - `get_base`
@@ -112,44 +220,15 @@ python3 import_records.py base_xxx tbl_xxx data.csv
 - `update_field`
 - `delete_field`
 
-### 常规流程
-1. 先 `get_tables` 看表和字段摘要。
-2. 再 `get_fields` 读完整字段配置。
-3. 过滤必须用 `fieldId`。
-4. 查询用 `query_records`。
-5. 新增用 `create_records`。
-6. 更新用 `update_records`。
-7. 附件先 `prepare_attachment_upload` -> `curl PUT` -> 写 `fileToken`。
+## 常规流程
 
-详细上手流程见 [docs/getting-started.md](docs/getting-started.md)。
-
-## 查询与写入规则
-
-- `query_records` 不适合做大表全量扫描，不要依赖 `cursor` 连续翻页。
-- 不要把“排序 + 过滤 + 翻页”串成连续遍历，也不要单独依赖“排序 + 翻页”或“过滤 + 翻页”做全量处理。
-- 批量处理只走“第一页 -> 处理记录 -> 回写辅助标记字段 -> 下次查未标记数据”的方式。
-- `filters` 必须使用 `fieldId`；`singleSelect / multipleSelect` 过滤必须传 option id。
-- 图片 / 附件字段默认不查；先判断当前 MCP schema 是否支持指定返回字段，支持时就只传非图片 / 非附件 `fieldId`。
-- 日期过滤、排序细节和更多示例见 [docs/query-rules.md](docs/query-rules.md)。
-
-## 附件写入
-
-可靠流程：
-
-```bash
-mcporter call dingtalk-ai-table prepare_attachment_upload \
-  --args '{"baseId":"base_xxx","fileName":"report.pdf","size":102400,"mimeType":"application/pdf"}'
-
-curl -X PUT "<uploadUrl>" \
-  -H "Content-Type: application/pdf" \
-  --data-binary @report.pdf
-
-mcporter call dingtalk-ai-table create_records \
-  --args '{"baseId":"base_xxx","tableId":"tbl_xxx","records":[{"cells":{"fld_attach":[{"fileToken":"ft_xxx"}]}}]}'
-```
-
-- `prepare_attachment_upload` 返回 `uploadUrl` 和 `fileToken`，`curl PUT` 后把 `fileToken` 写入记录。
-- 其他附件写法和已有附件保留 / 追加规则见 [docs/attachments.md](docs/attachments.md)。
+1. 先 `mcporter list dingtalk-ai-table --schema`，确认当前 schema 是新版。
+2. 再 `get_base` / `get_tables` 读取结构。
+3. 构造过滤条件前，必须先把字段名转换为 `fieldId`。
+4. `singleSelect / multipleSelect` 过滤时必须传 option id。
+5. 查询用 `query_records`，批量处理时只处理当前页并回写辅助标记字段。
+6. 用户未明确要求图片 / 附件字段时，默认排除图片 / 附件字段。
+7. 附件先 `prepare_attachment_upload`，再上传文件，最后写 `fileToken`。
 
 ## 脚本
 
@@ -168,10 +247,6 @@ python3 bulk_add_fields.py <baseId> <tableId> fields.json
 ]
 ```
 
-兼容项：
-- `name` 会自动映射为 `fieldName`
-- `phone` 会自动映射为 `telephone`
-
 ### 批量导入记录
 
 ```bash
@@ -180,6 +255,7 @@ python3 import_records.py <baseId> <tableId> data.json 50
 ```
 
 说明：
+
 - CSV 表头默认按 `fieldId` 解释
 - JSON 支持：
   - `[{"cells": {...}}]`
@@ -199,10 +275,10 @@ python3 import_records.py <baseId> <tableId> data.json 50
 
 - 先 `get_base`，再 `get_tables`，必要时 `get_fields`
 - 不要猜 `fieldId`
-- 构造过滤条件前，必须先把字段名转换为 fieldId
-- 不要依赖“排序 + 过滤 + 翻页”、“排序 + 翻页”、“过滤 + 翻页”做全量遍历
+- 构造过滤条件前，必须先把字段名转换为 `fieldId`
+- 不要依赖排序 + 过滤 + 翻页、排序 + 翻页、过滤 + 翻页做全量遍历
 - 批量处理优先使用“查询第一页 + 回写辅助标记字段”的方式推进
-- 用户未明确要求图片 / 附件字段时，默认排除图片 / 附件字段
+- 用户没有要求图片时，默认排除图片 / 附件字段
 - 复杂参数一律用 `--args` JSON
 - `singleSelect / multipleSelect` 过滤时必须传 option ID，不是 option name
 
@@ -210,3 +286,5 @@ python3 import_records.py <baseId> <tableId> data.json 50
 
 - API 参考：`references/api-reference.md`
 - 错误排查：`references/error-codes.md`
+- 快速开始补充：`docs/getting-started.md`
+

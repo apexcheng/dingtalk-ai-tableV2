@@ -7,7 +7,7 @@
 ### 参数体系写错
 
 **现象**
-- 还在用旧参数：`dentryUuid` / `sheetIdOrName`
+- 还在用旧版参数体系
 - 接口直接报参数缺失 / 无效请求
 
 **原因**
@@ -32,14 +32,14 @@
 
 **正确示例**
 ```bash
-mcporter call server.get_base baseId='base_xxx'
-mcporter call server.update_table baseId='base_xxx' tableId='tbl_xxx' newTableName='新表名'
+mcporter call dingtalk-ai-table get_base baseId='base_xxx'
+mcporter call dingtalk-ai-table update_table baseId='base_xxx' tableId='tbl_xxx' newTableName='新表名'
 ```
 
 **错误示例**
 ```bash
-mcporter call server.get_base base-id='base_xxx'
-mcporter call server.update_table table-id='tbl_xxx'
+mcporter call dingtalk-ai-table get_base base-id='base_xxx'
+mcporter call dingtalk-ai-table update_table table-id='tbl_xxx'
 ```
 
 **建议**
@@ -175,31 +175,31 @@ mcporter call server.update_table table-id='tbl_xxx'
 ### 看 Base
 
 ```bash
-mcporter call '<mcp-url>' .list_bases limit=10
-mcporter call '<mcp-url>' .get_base baseId='base_xxx'
+mcporter call dingtalk-ai-table list_bases limit=10
+mcporter call dingtalk-ai-table get_base baseId='base_xxx'
 ```
 
 ### 看 Table / Field
 
 ```bash
-mcporter call '<mcp-url>' .get_tables \
+mcporter call dingtalk-ai-table get_tables \
   --args '{"baseId":"base_xxx","tableIds":["tbl_xxx"]}'
 
-mcporter call '<mcp-url>' .get_fields \
+mcporter call dingtalk-ai-table get_fields \
   --args '{"baseId":"base_xxx","tableId":"tbl_xxx","fieldIds":["fld_xxx"]}'
 ```
 
 ### 查记录
 
 ```bash
-mcporter call '<mcp-url>' .query_records \
+mcporter call dingtalk-ai-table query_records \
   --args '{"baseId":"base_xxx","tableId":"tbl_xxx","limit":10}'
 ```
 
 ### 新增记录
 
 ```bash
-mcporter call '<mcp-url>' .create_records \
+mcporter call dingtalk-ai-table create_records \
   --args '{"baseId":"base_xxx","tableId":"tbl_xxx","records":[{"cells":{"fld_name":"张三"}}]}'
 ```
 
