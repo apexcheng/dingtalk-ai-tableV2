@@ -36,7 +36,15 @@ else
   SCHEMA=$(mcporter list dingtalk-ai-table --schema 2>/dev/null || echo "")
 fi
 
-if echo "$SCHEMA" | grep -q "list_bases\|get_base\|create_records"; then
+if [ -z "$SCHEMA" ]; then
+  echo "❌ 无法读取 schema，可能是未注册、URL 无效或当前 MCP Server 不可达"
+  echo ""
+  echo "请检查："
+  echo "1. 是否已在 mcporter 中注册 dingtalk-ai-table"
+  echo "2. 如果使用直连 URL，DINGTALK_AI_TABLE_DIRECT_URL 是否正确且可访问"
+  echo "3. 重新运行：mcporter list dingtalk-ai-table --schema"
+  exit 1
+elif echo "$SCHEMA" | grep -q "list_bases\|get_base\|create_records"; then
   echo "✅ 确认新版 schema"
   mkdir -p "$CACHE_DIR"
   echo "{\"status\":\"new_schema\",\"checked_at\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}" > "$CACHE_FILE"

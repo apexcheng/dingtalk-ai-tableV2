@@ -15,7 +15,7 @@ mcporter call dingtalk-ai-table query_records --args '{"baseId":"base_xxx","tabl
 如果当前环境没有注册 `dingtalk-ai-table`，可以作为高级兜底改用：
 
 ```bash
-export DINGTALK_AI_TABLE_DIRECT_URL='<your-url>'
+export DINGTALK_AI_TABLE_DIRECT_URL='<your-mcp-server-url>'
 mcporter call "$DINGTALK_AI_TABLE_DIRECT_URL" .list_bases limit=10
 ```
 

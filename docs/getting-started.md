@@ -40,7 +40,7 @@ python3 import_records.py base_xxx tbl_xxx data.csv
 如果当前环境没有注册 `dingtalk-ai-table`，可以改用直连 URL：
 
 ```bash
-export DINGTALK_AI_TABLE_DIRECT_URL='<your-url>'
+export DINGTALK_AI_TABLE_DIRECT_URL='<your-mcp-server-url>'
 mcporter call "$DINGTALK_AI_TABLE_DIRECT_URL" .list_bases limit=10
 ```
 

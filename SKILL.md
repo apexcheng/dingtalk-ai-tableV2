@@ -233,7 +233,7 @@ mcporter call dingtalk-ai-table list_bases limit=5
 2. 再 `get_base` / `get_tables` 读取结构。
 3. 构造过滤条件前，必须先把字段名转换为 `fieldId`。
 4. `singleSelect / multipleSelect` 过滤时必须传 option id。
-5. 查询用 `query_records`，批量处理时只处理当前页并回写辅助标记字段。
+5. 查询用 `query_records`：无 `filters`、无 `sort` 的普通大量读取可以使用 `cursor` 连续翻页；涉及 `filters` 或 `sort` 的批量处理，必须用“第一页 -> 处理 -> 回写辅助标记字段 -> 查未标记”。
 6. 用户未明确要求图片 / 附件字段时，默认排除图片 / 附件字段。
 7. 附件先 `prepare_attachment_upload`，再上传文件，最后写 `fileToken`。
 
@@ -284,7 +284,8 @@ python3 import_records.py <baseId> <tableId> data.json 50
 - 不要猜 `fieldId`
 - 构造过滤条件前，必须先把字段名转换为 `fieldId`
 - 不要依赖排序 + 过滤 + 翻页、排序 + 翻页、过滤 + 翻页做全量遍历
-- 批量处理优先使用“查询第一页 + 回写辅助标记字段”的方式推进
+- 无 `filters`、无 `sort` 的普通大量读取可以使用 `cursor`
+- 涉及 `filters` 或 `sort` 的批量处理，必须使用“第一页 + 处理 + 回写辅助标记字段 + 查未标记”的方式推进
 - 用户没有要求图片时，默认排除图片 / 附件字段
 - 复杂参数一律用 `--args` JSON
 - `singleSelect / multipleSelect` 过滤时必须传 option ID，不是 option name
