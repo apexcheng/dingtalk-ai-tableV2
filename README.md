@@ -109,6 +109,8 @@ python3 import_records.py base_xxx tbl_xxx data.json 50
 | `date` | 日期 | `"2026-03-31"` |
 | `user` | 用户 | `{"id":"user_xxx"}` |
 | `checkbox` | 复选框 | `true` |
-| `attachment` | 附件 | `[{"fileId":"file_xxx"}]` |
+| `attachment` | 附件 | `[{"fileToken":"ft_xxx"}]` |
 | `url` | 链接 | `{"text":"官网","link":"https://..."}` |
 | `richText` | 富文本 | `{"markdown":"**加粗**"}` |
+
+附件字段推荐使用 `fileToken`；如需保留已有附件，先从 `query_records` 读取原始附件对象，再原样合并回传。
