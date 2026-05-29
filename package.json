@@ -48,7 +48,7 @@
       {
         "name": "OPENCLAW_WORKSPACE",
         "description": "本地脚本文件读写沙箱根目录；建议设置为 ~/.openclaw/workspace",
-        "docs": "https://github.com/aliramw/dingtalk-ai-table",
+        "docs": "https://github.com/apexcheng/dingtalk-ai-table",
         "storageMethod": "environment variable"
       }
     ]

@@ -309,7 +309,7 @@ mcporter call '<mcp-url>' .create_base baseName='销售日报'
 - `sort`（可选）
 - `fieldIds`（可选）
 - `limit`（默认 100，最大 100）
-- `cursor`（可选）
+- `cursor`（可选）：仅用于普通浏览；不要与 `filters` / `sort` 组合做稳定批量遍历
 
 ### filters 说明
 
