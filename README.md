@@ -9,7 +9,7 @@
 mcporter list dingtalk-ai-table --schema
 mcporter call dingtalk-ai-table list_bases limit=5
 mcporter call dingtalk-ai-table get_base baseId='base_xxx'
-mcporter call dingtalk-ai-table query_records --args '{"baseId":"base_xxx","tableId":"tbl_xxx","limit":10}'
+mcporter call dingtalk-ai-table query_records --args '{"baseId":"base_xxx","tableId":"tbl_xxx","limit":100}'
 ```
 
 如果当前环境没有注册 `dingtalk-ai-table`，可以作为高级兜底改用：
@@ -88,6 +88,14 @@ fld_name,fld_age,fld_status,fld_salary
     }
   }
 ]
+```
+
+## 批量脚本用法
+
+```bash
+python3 bulk_add_fields.py base_xxx tbl_xxx fields.json
+python3 import_records.py base_xxx tbl_xxx data.csv
+python3 import_records.py base_xxx tbl_xxx data.json 50
 ```
 
 ## 字段类型参考

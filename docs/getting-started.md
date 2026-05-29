@@ -33,6 +33,7 @@ mcporter call dingtalk-ai-table delete_records \
 ```bash
 python3 bulk_add_fields.py base_xxx tbl_xxx fields.json
 python3 import_records.py base_xxx tbl_xxx data.csv
+python3 import_records.py base_xxx tbl_xxx data.json 50
 ```
 
 ## 可选直连

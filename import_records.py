@@ -3,8 +3,8 @@
 从 CSV / JSON 批量导入记录到钉钉 AI 表格（新 MCP schema）
 
 用法:
-    python import_records.py <baseId> <tableId> data.csv [batch_size]
-    python import_records.py <baseId> <tableId> data.json [batch_size]
+    python3 import_records.py <baseId> <tableId> data.csv
+    python3 import_records.py <baseId> <tableId> data.json [batch_size]
 
 说明：
 - CSV 表头默认视为 fieldId
@@ -285,7 +285,8 @@ def main():
     if len(sys.argv) < 4 or len(sys.argv) > 5:
         print(__doc__)
         print('用法示例:')
-        print('  python import_records.py basexxx tablexxx data.csv 50')
+        print('  python3 import_records.py basexxx tablexxx data.csv')
+        print('  python3 import_records.py basexxx tablexxx data.json 50')
         sys.exit(1)
 
     base_id = sys.argv[1]

@@ -119,7 +119,7 @@ mcporter call dingtalk-ai-table list_bases limit=5
 
 涉及 `filters` 或 `sort` 的批量处理，必须使用“查询标记”方式推进：
 
-1. 查询第一页
+1. 用 `query_records` 且 `limit: 100` 查询第一页
 2. 处理当前返回记录
 3. 用 `update_records` 回写字段 `查询标记`
 4. 下一轮继续查询未标记记录
@@ -132,25 +132,95 @@ mcporter call dingtalk-ai-table list_bases limit=5
 - 每批处理完成后，必须 `update_records` 回写 `查询标记`
 - 下一轮查询时，`filters` 里必须排除已标记记录，只查询 `查询标记` 为空或不等于本次任务标记的记录
 
-历史表里可能已经存在 `处理标记`、`同步标记`、`回查标记`、`AI处理标记` 等旧字段；新任务统一使用 `查询标记`，不要再新增或推荐其他同级标记字段名。
+禁止新增或推荐其他同类辅助字段名，包括但不限于：
+
+- `处理标记`
+- `同步标记`
+- `回查标记`
+- `AI处理标记`
 
 `查询标记` 只用于避免重复读取和模拟稳定分页，不应承载业务含义。
 
 ### 5. 返回 `100` 条后的处理规则
 
-在 `filters` 或 `sort` 场景下，如果本轮 `query_records` 返回数量大于等于 `100`，必须认为可能还有更多记录。
+在 `filters` 或 `sort` 场景下，如果本轮 `query_records` 返回数量大于等于 `100`，或大于等于本轮 `limit`，必须认为可能还有更多记录。
 
 下一批只能通过继续查询“`查询标记` 为空 / 不等于本次任务标记”的记录获取，禁止使用 `cursor` 获取下一页。
 
+如果任务要求处理全量结果，必须严格按以下流程推进：
+
+1. `query_records` 使用 `limit: 100` 查询第一批
+2. 处理本批记录
+3. 给已处理记录写入 `查询标记`
+4. 下一次查询时排除已写入 `查询标记` 的记录
+5. 重复直到返回数量小于 `100`
+
 ### 6. `filters` 字段规则
 
-`filters` 必须使用 `fieldId`，不能直接使用字段名称，例如 `商品ID`、`日期`、`店铺`。
+`filters` 必须使用 MCP/schema 支持的对象结构，并且过滤字段必须使用 `fieldId`，不能直接使用字段名称，例如 `商品ID`、`日期`、`店铺`。
+
+禁止使用以下错误格式：
+
+```json
+{
+  "baseId": "base_xxx",
+  "tableId": "tbl_xxx",
+  "filterType": "and",
+  "filters": [
+    {
+      "fieldName": "评价时间",
+      "operator": "gte",
+      "value": "2026-05-28"
+    }
+  ],
+  "limit": 100
+}
+```
+
+这是硬性禁止项：
+
+- 禁止使用 `filterType`
+- 禁止把 `filters` 写成数组
+- 禁止使用 `fieldName` 作为过滤字段
+- 禁止 Agent 自行猜测 `gte`、`lte` 等 operator
+- `filters` 必须使用 MCP/schema 支持的对象结构
+- 过滤字段必须先通过字段列表获取 `fieldId`，再用 `fieldId` 过滤
+
+唯一推荐格式：
+
+```json
+{
+  "baseId": "base_xxx",
+  "tableId": "tbl_xxx",
+  "limit": 100,
+  "filters": {
+    "operator": "and",
+    "operands": [
+      {
+        "operator": "eq",
+        "operands": ["fld_xxx", "2026-05-28"]
+      }
+    ]
+  }
+}
+```
+
+其中 `fld_xxx` 是字段 ID，不是字段名称。
 
 正确流程是：
 
 1. 先读取字段列表
 2. 找到字段名称对应的 `fieldId`
 3. 用 `fieldId` 构造过滤条件
+
+### 6.1 `filters` operator 使用规则
+
+- 不要猜 operator
+- 不要因为常见数据库 API 有 `gte` / `lte`，就直接使用
+- 只有在当前 schema、工具说明、服务端错误提示或项目代码里明确支持时，才能使用对应 operator
+- 如果不确定 operator 是否支持，优先使用已确认的 `eq`
+- 日期范围查询不要直接猜 `gte` / `lte`
+- 更稳方案是按日期拆成多次 `eq` 查询，或先查小范围数据后在 Agent 侧过滤，或根据服务端返回的支持 operator 列表再调整
 
 ### 7. 单选 / 多选过滤规则
 
@@ -322,6 +392,7 @@ python3 import_records.py <baseId> <tableId> data.json 50
 - 涉及 `filters` 或 `sort` 的批量处理，必须使用“第一页 + 处理 + 回写 `查询标记` + 查未标记”的方式推进
 - `filters` 或 `sort` 场景下，如果单轮返回大于等于 `100` 条，必须继续查询未标记记录，不能使用 `cursor` 取下一页
 - 若缺少 `查询标记` 字段，可先创建该字段，类型优先 `text`
+- `filters` 必须使用对象结构和 `fieldId`；禁止使用 `filterType`、数组 `filters`、`fieldName` 过滤和未确认支持的 `gte` / `lte`
 - 按天过滤必须使用 `[当天 00:00:00, 次日 00:00:00)`，不要把 `after` 和 `before` 设成同一个时间点
 - 用户没有要求图片时，默认排除图片 / 附件字段
 - 复杂参数一律用 `--args` JSON
