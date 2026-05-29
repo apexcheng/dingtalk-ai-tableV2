@@ -18,10 +18,10 @@
   "homepage": "https://clawhub.com/skills/dingtalk-ai-table",
   "repository": {
     "type": "git",
-    "url": "https://github.com/aliramw/dingtalk-ai-table.git"
+    "url": "https://github.com/apexcheng/dingtalk-ai-table.git"
   },
   "bugs": {
-    "url": "https://github.com/aliramw/dingtalk-ai-table/issues"
+    "url": "https://github.com/apexcheng/dingtalk-ai-table/issues"
   },
   "engines": {
     "node": ">=18.0.0"

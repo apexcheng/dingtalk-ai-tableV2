@@ -10,11 +10,12 @@ CACHE_DIR="$WORKSPACE/.cache/dingtalk-ai-table"
 
 if [ -z "$MCP_URL" ]; then
   echo "❌ 错误：未设置 DINGTALK_MCP_URL"
+  echo "   说明：此脚本仅从 DINGTALK_MCP_URL 读取 MCP 地址，不会自动读取 mcporter 配置。"
   exit 1
 fi
 
 # 生成 URL hash 作为检查标记
-URL_HASH=$(echo -n "$MCP_URL" | md5sum | cut -d' ' -f1)
+URL_HASH=$(printf '%s' "$MCP_URL" | shasum -a 256 | cut -d' ' -f1)
 CACHE_FILE="$CACHE_DIR/schema-check-$URL_HASH.json"
 
 # 如果已检查过且结果为新版，直接跳过

@@ -73,6 +73,7 @@ mcporter call server.update_table table-id='tbl_xxx'
 1. 先 `get_fields` 读取字段完整配置
 2. 找到 options 里的 id
 3. 在 filters 里传 id
+4. 如果报 `Invalid filter operator`，优先检查是否把 `ne` 误写成了 `neq`
 
 ---
 

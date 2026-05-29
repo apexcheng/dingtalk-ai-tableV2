@@ -124,6 +124,6 @@ python3 import_records.py base_xxx tbl_xxx data.csv
 
 ## 下一步
 
-- 📖 详细 API 参考：`references/api-reference.md`
-- 🐛 错误排查：`references/error-codes.md`
+- 📖 详细 API 参考：`api-reference.md`
+- 🐛 错误排查：`error-codes.md`
 - 🔒 安全规则：`SKILL.md` 的"安全规则"部分
