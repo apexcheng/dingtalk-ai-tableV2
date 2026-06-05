@@ -13,15 +13,31 @@
   2. [{"fldxxx": "value"}, ...]  # 会自动包装成 cells
 """
 
-import sys
 import csv
 import json
-import subprocess
-import os
-import re
-from functools import lru_cache
-from pathlib import Path
-from typing import Union, List, Dict, Any, Optional, Tuple
+import sys
+from typing import Any, Dict, List, Optional, Tuple, Union
+
+from dingtalk_ai_table.client import build_mcporter_call, get_mcporter_version, parse_mcporter_version, run_mcporter
+from dingtalk_ai_table.files import (
+    resolve_safe_path,
+    safe_csv_load as package_safe_csv_load,
+    safe_json_load as package_safe_json_load,
+    validate_file_extension,
+)
+from dingtalk_ai_table.guards import (
+    MAX_RECORDS_PER_BATCH,
+    RESOURCE_ID_PATTERN,
+    validate_dentry_uuid,
+    validate_resource_id,
+)
+from dingtalk_ai_table.records import (
+    build_create_records_payload,
+    create_records,
+    normalize_record,
+    sanitize_record_value,
+    validate_record,
+)
 
 JsonData = Union[List[Any], Dict[str, Any]]
 RecordDict = Dict[str, str]
@@ -29,172 +45,22 @@ RecordDict = Dict[str, str]
 MAX_FILE_SIZE = 50 * 1024 * 1024
 ALLOWED_CSV_EXTENSIONS = ['.csv']
 ALLOWED_JSON_EXTENSIONS = ['.json']
-RESOURCE_ID_PATTERN = re.compile(r'^[A-Za-z0-9_-]{8,128}$')
-MAX_RECORDS_PER_BATCH = 100
 DEFAULT_BATCH_SIZE = 50
-MCPORTER_VERSION_PATTERN = re.compile(r'(\d+)\.(\d+)\.(\d+)')
-MCPORTER_TEXT_OUTPUT_CUTOFF = (0, 8, 1)
 
 
-def resolve_safe_path(path: str, allowed_root: Optional[str] = None) -> Path:
-    if allowed_root is None:
-        allowed_root = os.environ.get('OPENCLAW_WORKSPACE', os.getcwd())
-    allowed_root = Path(allowed_root).resolve()
-    target_path = Path(path).resolve() if Path(path).is_absolute() else (Path.cwd() / path).resolve()
-    try:
-        target_path.relative_to(allowed_root)
-        return target_path
-    except ValueError:
-        raise ValueError(
-            f"路径超出允许范围：{path}\n"
-            f"目标路径：{target_path}\n"
-            f"允许根目录：{allowed_root}\n"
-            f"提示：设置 OPENCLAW_WORKSPACE 环境变量或确保文件在工作目录内"
-        )
+def safe_csv_load(file_path):
+    return package_safe_csv_load(file_path, MAX_FILE_SIZE)
 
 
-def validate_resource_id(resource_id: str) -> bool:
-    return bool(resource_id and RESOURCE_ID_PATTERN.match(resource_id.strip()))
-
-
-def validate_dentry_uuid(dentry_uuid: str) -> bool:
-    return validate_resource_id(dentry_uuid)
-
-
-def validate_file_extension(filename: str, allowed_extensions: list) -> bool:
-    return any(filename.lower().endswith(ext) for ext in allowed_extensions)
-
-
-def parse_mcporter_version(raw_text: str) -> Optional[Tuple[int, int, int]]:
-    match = MCPORTER_VERSION_PATTERN.search(raw_text)
-    if not match:
-        return None
-    return tuple(int(part) for part in match.groups())
-
-
-@lru_cache(maxsize=1)
-def get_mcporter_version() -> Optional[Tuple[int, int, int]]:
-    for cmd in (['mcporter', '--version'], ['mcporter', 'version']):
-        try:
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
-        except (subprocess.TimeoutExpired, FileNotFoundError):
-            return None
-
-        if result.returncode != 0:
-            continue
-
-        version = parse_mcporter_version(f"{result.stdout}\n{result.stderr}")
-        if version is not None:
-            return version
-
-    return None
-
-
-def build_mcporter_call(args: List[str]) -> List[str]:
-    direct_url = os.environ.get('DINGTALK_AI_TABLE_DIRECT_URL')
-    if direct_url:
-        tool_name = args[0]
-        if not tool_name.startswith('.'):
-            tool_name = f'.{tool_name}'
-        cmd = ['mcporter', 'call', direct_url]
-        args = [tool_name] + args[1:]
-    else:
-        cmd = ['mcporter', 'call', 'dingtalk-ai-table']
-    version = get_mcporter_version()
-    if version is not None and version < MCPORTER_TEXT_OUTPUT_CUTOFF:
-        cmd.extend(['--output', 'text'])
-    return cmd + args
-
-
-def safe_csv_load(file_path: Path, max_size: int = MAX_FILE_SIZE) -> List[RecordDict]:
-    file_size = file_path.stat().st_size
-    if file_size > max_size:
-        raise ValueError(f"文件过大：{file_size:,} 字节 (限制：{max_size:,} 字节)")
-    with open(file_path, 'r', encoding='utf-8-sig', newline='') as f:
-        return list(csv.DictReader(f))
-
-
-def safe_json_load(file_path: Path, max_size: int = MAX_FILE_SIZE) -> JsonData:
-    file_size = file_path.stat().st_size
-    if file_size > max_size:
-        raise ValueError(f"文件过大：{file_size:,} 字节 (限制：{max_size:,} 字节)")
-    with open(file_path, 'r', encoding='utf-8') as f:
-        return json.load(f)
-
-
-def sanitize_record_value(value: Any) -> Optional[Union[str, int, float, bool, list, dict]]:
-    if value is None:
-        return None
-    if isinstance(value, (bool, int, float, list, dict)):
-        return value
-    if not isinstance(value, str):
-        return value
-    value = value.strip()
-    if not value:
-        return None
-    return value
-
-
-def normalize_record(record: Dict[str, Any]) -> Dict[str, Any]:
-    if 'cells' in record and isinstance(record['cells'], dict):
-        cells = record['cells']
-    else:
-        cells = record
-    normalized = {}
-    for key, value in cells.items():
-        sanitized = sanitize_record_value(value)
-        if sanitized is not None:
-            normalized[key] = sanitized
-    return {'cells': normalized}
-
-
-def validate_record(record: Dict[str, Any], headers: List[str]) -> Tuple[bool, str]:
-    if not isinstance(record, dict):
-        return False, '记录必须是对象'
-    normalized = normalize_record(record)
-    cells = normalized.get('cells', {})
-    if not cells or not isinstance(cells, dict):
-        return False, '记录必须包含非空 cells 对象'
-    return True, ''
-
-
-def build_create_records_payload(base_id: str, table_id: str, records: List[Dict[str, Any]]) -> Dict[str, Any]:
-    return {
-        'baseId': base_id,
-        'tableId': table_id,
-        'records': [normalize_record(record) for record in records],
-    }
-
-
-def run_mcporter(args: List[str]) -> Optional[Dict[str, Any]]:
-    if not args:
-        print('错误：空命令')
-        return None
-    cmd = build_mcporter_call(args)
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
-        if result.returncode != 0:
-            print(f"错误：{result.stderr.strip()}")
-            return None
-        try:
-            return json.loads(result.stdout)
-        except json.JSONDecodeError as e:
-            print(f"无法解析响应：{result.stdout[:200]}...")
-            print(f"JSON 解析错误：{e}")
-            return None
-    except subprocess.TimeoutExpired:
-        print('错误：命令执行超时（120 秒）')
-        return None
-    except FileNotFoundError:
-        print('错误：未找到 mcporter 命令，请确认已安装')
-        return None
+def safe_json_load(file_path):
+    return package_safe_json_load(file_path, MAX_FILE_SIZE, encoding='utf-8')
 
 
 def import_from_csv(base_id: str, table_id: str, csv_file: str, batch_size: int = DEFAULT_BATCH_SIZE) -> bool:
     try:
         safe_path = resolve_safe_path(csv_file)
-    except ValueError as e:
-        print(f"路径验证失败：{e}")
+    except ValueError as exc:
+        print(f"路径验证失败：{exc}")
         return False
 
     if not validate_file_extension(csv_file, ALLOWED_CSV_EXTENSIONS):
@@ -206,11 +72,11 @@ def import_from_csv(base_id: str, table_id: str, csv_file: str, batch_size: int 
 
     try:
         rows = safe_csv_load(safe_path)
-    except ValueError as e:
-        print(f"错误：{e}")
+    except ValueError as exc:
+        print(f"错误：{exc}")
         return False
-    except csv.Error as e:
-        print(f"错误：CSV 格式无效：{e}")
+    except csv.Error as exc:
+        print(f"错误：CSV 格式无效：{exc}")
         return False
 
     if not rows:
@@ -224,8 +90,8 @@ def import_from_csv(base_id: str, table_id: str, csv_file: str, batch_size: int 
 def import_from_json(base_id: str, table_id: str, json_file: str, batch_size: int = DEFAULT_BATCH_SIZE) -> bool:
     try:
         safe_path = resolve_safe_path(json_file)
-    except ValueError as e:
-        print(f"路径验证失败：{e}")
+    except ValueError as exc:
+        print(f"路径验证失败：{exc}")
         return False
 
     if not validate_file_extension(json_file, ALLOWED_JSON_EXTENSIONS):
@@ -237,24 +103,24 @@ def import_from_json(base_id: str, table_id: str, json_file: str, batch_size: in
 
     try:
         records = safe_json_load(safe_path)
-    except ValueError as e:
-        print(f"错误：{e}")
+    except ValueError as exc:
+        print(f"错误：{exc}")
         return False
-    except json.JSONDecodeError as e:
-        print(f"错误：JSON 格式无效：{e}")
+    except json.JSONDecodeError as exc:
+        print(f"错误：JSON 格式无效：{exc}")
         return False
 
     if not isinstance(records, list) or not records:
         print('错误：JSON 文件必须是非空数组')
         return False
 
-    for i, record in enumerate(records):
+    for index, record in enumerate(records):
         valid, error = validate_record(record, [])
         if not valid:
-            print(f"错误：记录 #{i+1} 格式无效：{error}")
+            print(f"错误：记录 #{index + 1} 格式无效：{error}")
             return False
 
-    return import_records(base_id, table_id, [normalize_record(r) for r in records], batch_size)
+    return import_records(base_id, table_id, [normalize_record(record) for record in records], batch_size)
 
 
 def import_records(base_id: str, table_id: str, records: List[Dict[str, Any]], batch_size: int) -> bool:
@@ -267,14 +133,14 @@ def import_records(base_id: str, table_id: str, records: List[Dict[str, Any]], b
     total_batches = (len(records) + batch_size - 1) // batch_size
     success = True
 
-    for i in range(0, len(records), batch_size):
-        batch = records[i:i + batch_size]
-        batch_num = (i // batch_size) + 1
-        payload = build_create_records_payload(base_id, table_id, batch)
-        result = run_mcporter(['create_records', '--args', json.dumps(payload, ensure_ascii=False)])
-        if result:
+    for offset in range(0, len(records), batch_size):
+        batch = records[offset:offset + batch_size]
+        batch_num = (offset // batch_size) + 1
+        try:
+            create_records(base_id, table_id, batch)
             print(f"[{batch_num}/{total_batches}] ✓ 已提交 {len(batch)} 条记录")
-        else:
+        except (RuntimeError, ValueError) as exc:
+            print(exc)
             print(f"[{batch_num}/{total_batches}] ✗ 导入失败")
             success = False
 

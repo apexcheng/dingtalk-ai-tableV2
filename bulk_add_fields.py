@@ -17,203 +17,45 @@ fields.json 格式:
 - phone 会自动映射为 telephone
 """
 
-import sys
 import json
-import subprocess
-import os
-import re
-from functools import lru_cache
-from pathlib import Path
-from typing import Union, List, Dict, Any, Optional, Tuple
+import sys
+from typing import Any, Dict, List
 
-JsonData = Union[List[Any], Dict[str, Any]]
+from dingtalk_ai_table.client import build_mcporter_call, get_mcporter_version, parse_mcporter_version, run_mcporter
+from dingtalk_ai_table.fields import (
+    ALLOWED_FIELD_TYPES,
+    FIELD_TYPE_ALIASES,
+    build_create_fields_payload,
+    create_fields,
+    normalize_field_config,
+    validate_field_config,
+)
+from dingtalk_ai_table.files import (
+    resolve_safe_path,
+    safe_json_load as package_safe_json_load,
+    validate_file_extension,
+)
+from dingtalk_ai_table.guards import (
+    MAX_FIELDS_PER_CREATE,
+    RESOURCE_ID_PATTERN,
+    validate_dentry_uuid,
+    validate_field_batch,
+    validate_resource_id,
+)
 
 MAX_FILE_SIZE = 10 * 1024 * 1024
 ALLOWED_FILE_EXTENSIONS = ['.json']
-RESOURCE_ID_PATTERN = re.compile(r'^[A-Za-z0-9_-]{8,128}$')
-ALLOWED_FIELD_TYPES = {
-    'text', 'number', 'singleSelect', 'multipleSelect', 'date', 'currency',
-    'user', 'department', 'group', 'progress', 'rating', 'checkbox',
-    'attachment', 'url', 'richText', 'telephone', 'email', 'idCard',
-    'barcode', 'geolocation', 'primaryDoc', 'formula', 'unidirectionalLink',
-    'bidirectionalLink', 'creator', 'lastModifier', 'createdTime', 'lastModifiedTime'
-}
-FIELD_TYPE_ALIASES = {
-    'phone': 'telephone',
-}
-MCPORTER_VERSION_PATTERN = re.compile(r'(\d+)\.(\d+)\.(\d+)')
-MCPORTER_TEXT_OUTPUT_CUTOFF = (0, 8, 1)
 
 
-def resolve_safe_path(path: str, allowed_root: Optional[str] = None) -> Path:
-    if allowed_root is None:
-        allowed_root = os.environ.get('OPENCLAW_WORKSPACE', os.getcwd())
-
-    allowed_root = Path(allowed_root).resolve()
-    target_path = Path(path).resolve() if Path(path).is_absolute() else (Path.cwd() / path).resolve()
-
-    try:
-        target_path.relative_to(allowed_root)
-        return target_path
-    except ValueError:
-        raise ValueError(
-            f"路径超出允许范围：{path}\n"
-            f"目标路径：{target_path}\n"
-            f"允许根目录：{allowed_root}\n"
-            f"提示：设置 OPENCLAW_WORKSPACE 环境变量或确保文件在工作目录内"
-        )
-
-
-def validate_resource_id(resource_id: str) -> bool:
-    return bool(resource_id and RESOURCE_ID_PATTERN.match(resource_id.strip()))
-
-
-def validate_dentry_uuid(dentry_uuid: str) -> bool:
-    """兼容旧测试名；新 schema 实际用于校验 baseId/tableId/fieldId。"""
-    return validate_resource_id(dentry_uuid)
-
-
-def validate_file_extension(filename: str, allowed_extensions: list) -> bool:
-    return any(filename.lower().endswith(ext) for ext in allowed_extensions)
-
-
-def parse_mcporter_version(raw_text: str) -> Optional[Tuple[int, int, int]]:
-    match = MCPORTER_VERSION_PATTERN.search(raw_text)
-    if not match:
-        return None
-    return tuple(int(part) for part in match.groups())
-
-
-@lru_cache(maxsize=1)
-def get_mcporter_version() -> Optional[Tuple[int, int, int]]:
-    for cmd in (['mcporter', '--version'], ['mcporter', 'version']):
-        try:
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
-        except (subprocess.TimeoutExpired, FileNotFoundError):
-            return None
-
-        if result.returncode != 0:
-            continue
-
-        version = parse_mcporter_version(f"{result.stdout}\n{result.stderr}")
-        if version is not None:
-            return version
-
-    return None
-
-
-def build_mcporter_call(args: List[str]) -> List[str]:
-    direct_url = os.environ.get('DINGTALK_AI_TABLE_DIRECT_URL')
-    if direct_url:
-        tool_name = args[0]
-        if not tool_name.startswith('.'):
-            tool_name = f'.{tool_name}'
-        cmd = ['mcporter', 'call', direct_url]
-        args = [tool_name] + args[1:]
-    else:
-        cmd = ['mcporter', 'call', 'dingtalk-ai-table']
-    version = get_mcporter_version()
-    if version is not None and version < MCPORTER_TEXT_OUTPUT_CUTOFF:
-        cmd.extend(['--output', 'text'])
-    return cmd + args
-
-
-def safe_json_load(file_path: Path, max_size: int = MAX_FILE_SIZE) -> JsonData:
-    file_size = file_path.stat().st_size
-    if file_size > max_size:
-        raise ValueError(f"文件过大：{file_size:,} 字节 (限制：{max_size:,} 字节)")
-    with open(file_path, 'r', encoding='utf-8-sig') as f:
-        return json.load(f)
-
-
-def normalize_field_config(field: Dict[str, Any]) -> Dict[str, Any]:
-    normalized = dict(field)
-    if 'fieldName' not in normalized and 'name' in normalized:
-        normalized['fieldName'] = normalized.pop('name')
-    normalized['type'] = FIELD_TYPE_ALIASES.get(normalized.get('type', 'text'), normalized.get('type', 'text'))
-    return normalized
-
-
-def validate_field_config(field: Dict[str, Any]) -> Tuple[bool, str]:
-    if not isinstance(field, dict):
-        return False, '字段配置必须是对象'
-
-    field = normalize_field_config(field)
-
-    if 'fieldName' not in field:
-        return False, '缺少必需字段：fieldName'
-    if not isinstance(field['fieldName'], str) or not field['fieldName'].strip():
-        return False, 'fieldName 必须是非空字符串'
-
-    field_type = field.get('type', 'text')
-    if field_type not in ALLOWED_FIELD_TYPES:
-        return False, f"不支持的字段类型：{field_type}"
-
-    config = field.get('config')
-    if config is not None and not isinstance(config, dict):
-        return False, 'config 必须是对象'
-
-    if field_type in {'singleSelect', 'multipleSelect'}:
-        options = (config or {}).get('options')
-        if not options or not isinstance(options, list):
-            return False, 'singleSelect / multipleSelect 必须提供 config.options 数组'
-
-    if field_type in {'unidirectionalLink', 'bidirectionalLink'}:
-        linked_sheet_id = (config or {}).get('linkedSheetId')
-        if not linked_sheet_id or not validate_resource_id(linked_sheet_id):
-            return False, '关联字段必须提供合法的 config.linkedSheetId'
-
-    return True, ''
-
-
-def build_create_fields_payload(base_id: str, table_id: str, fields: List[Dict[str, Any]]) -> Dict[str, Any]:
-    payload_fields = []
-    for field in fields:
-        normalized = normalize_field_config(field)
-        item = {
-            'fieldName': normalized['fieldName'].strip(),
-            'type': normalized.get('type', 'text')
-        }
-        if 'config' in normalized and normalized['config'] is not None:
-            item['config'] = normalized['config']
-        payload_fields.append(item)
-    return {
-        'baseId': base_id,
-        'tableId': table_id,
-        'fields': payload_fields,
-    }
-
-
-def run_mcporter(args: List[str]) -> Optional[Dict[str, Any]]:
-    if not args:
-        print('错误：空命令')
-        return None
-
-    cmd = build_mcporter_call(args)
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-        if result.returncode != 0:
-            print(f"错误：{result.stderr.strip()}")
-            return None
-        try:
-            return json.loads(result.stdout)
-        except json.JSONDecodeError as e:
-            print(f"无法解析响应：{result.stdout[:200]}...")
-            print(f"JSON 解析错误：{e}")
-            return None
-    except subprocess.TimeoutExpired:
-        print('错误：命令执行超时（60 秒）')
-        return None
-    except FileNotFoundError:
-        print('错误：未找到 mcporter 命令，请确认已安装')
-        return None
+def safe_json_load(file_path):
+    return package_safe_json_load(file_path, MAX_FILE_SIZE)
 
 
 def bulk_add_fields(base_id: str, table_id: str, fields_file: str) -> bool:
     try:
         safe_path = resolve_safe_path(fields_file)
-    except ValueError as e:
-        print(f"路径验证失败：{e}")
+    except ValueError as exc:
+        print(f"路径验证失败：{exc}")
         return False
 
     if not validate_file_extension(fields_file, ALLOWED_FILE_EXTENSIONS):
@@ -225,30 +67,33 @@ def bulk_add_fields(base_id: str, table_id: str, fields_file: str) -> bool:
 
     try:
         fields = safe_json_load(safe_path)
-    except ValueError as e:
-        print(f"错误：{e}")
+    except ValueError as exc:
+        print(f"错误：{exc}")
         return False
-    except json.JSONDecodeError as e:
-        print(f"错误：JSON 格式无效：{e}")
+    except json.JSONDecodeError as exc:
+        print(f"错误：JSON 格式无效：{exc}")
         return False
 
     if not isinstance(fields, list) or not fields:
         print('错误：fields.json 必须是非空 JSON 数组')
         return False
-    if len(fields) > 15:
-        print('错误：单次最多创建 15 个字段，请拆分后重试')
+
+    try:
+        validate_field_batch(fields)
+    except ValueError as exc:
+        print(f"错误：{exc}")
         return False
 
-    for i, field in enumerate(fields):
+    for index, field in enumerate(fields):
         valid, error = validate_field_config(field)
         if not valid:
-            print(f"错误：字段 #{i+1} 配置无效：{error}")
+            print(f"错误：字段 #{index + 1} 配置无效：{error}")
             return False
 
-    payload = build_create_fields_payload(base_id, table_id, fields)
-    result = run_mcporter(['create_fields', '--args', json.dumps(payload, ensure_ascii=False)])
-
-    if not result:
+    try:
+        result = create_fields(base_id, table_id, fields)
+    except (RuntimeError, ValueError) as exc:
+        print(exc)
         return False
 
     print(json.dumps(result, ensure_ascii=False, indent=2))

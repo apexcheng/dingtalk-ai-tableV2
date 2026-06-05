@@ -25,6 +25,38 @@ metadata:
 
 ## 快速开始
 
+### 0. 优先使用 Python 安全调用层
+
+仓库内已经提供 `dingtalk_ai_table/` Python 安全调用层。
+
+只要是高风险调用，优先走这一层，不要手拼 `mcporter call dingtalk-ai-table ...`
+参数，尤其不要把文档规则只停留在提示层。以下边界应由 Python 层硬校验：
+
+- `query_records.limit <= 100`
+- `filters / sort` 场景禁止配合 `cursor`
+- `filters` 只能用对象结构 + `fieldId`
+- 只允许已确认的 operator：`eq`、`ne`、`date_eq`
+- `create_fields` / `get_tables` / `get_fields` / record 批量上限
+- `查询标记` 技术性分页
+- 附件合并回写保护
+
+常见业务 helper：
+
+- `query_with_marker`：适合 `filters / sort` 场景下的稳定批量处理
+- `query_date_range_with_marker`：适合日期范围查询，内部会按天拆分成 `date_eq`，并在每天范围内使用 `查询标记` 推进，不回退到 `cursor`
+
+如果是 OpenClaw skill 直接调用，优先使用包根导出的最小入口函数集合：
+
+- `resolve_field_id`
+- `resolve_option_id`
+- `safe_query_records`
+- `safe_create_records`
+- `safe_update_records`
+- `safe_delete_records`
+- `process_records_with_marker`
+- `process_date_range_with_marker`
+- `safe_prepare_attachment_upload`
+
 ### 1. 首次使用先检查 schema
 
 首次调用前，或当 `mcporter` 里注册的 MCP Server 地址变化后，先执行：
