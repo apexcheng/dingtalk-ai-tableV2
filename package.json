@@ -44,6 +44,6 @@
     ]
   },
   "scripts": {
-    "test": "python3 test_security.py"
+    "test": "python -B -m unittest -v"
   }
 }
