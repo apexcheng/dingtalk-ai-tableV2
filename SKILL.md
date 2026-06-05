@@ -40,6 +40,7 @@ Agent 使用本 skill 时，遵守下面的优先级：
 5. **带 filters 或 sort 且可能超过 100 条时，用查询标记分页**
 6. **日期范围不要用 gte / lte，必须按天拆成 date_eq**
 7. **写入 cells 时，key 必须是 fieldId，不是字段名**
+8. **MCP URL 优先通过环境变量或 mcporter 注册配置完成，不要写死在代码里**
 
 ## 2. 什么时候使用
 
@@ -70,7 +71,77 @@ Agent 使用本 skill 时，遵守下面的优先级：
 - 让 Agent 自己拼复杂 mcporter 参数
 - 在不知道 `base_id` / `table_id` 的情况下盲目调用
 
-## 4. 推荐导入方式
+## 4. MCP URL 配置
+
+本 skill 通过 `mcporter` 调用钉钉 AI 表格 MCP。
+
+有两种配置方式。
+
+### 4.1 推荐方式：使用 mcporter 注册名
+
+默认情况下，Python 层会执行：
+
+```bash
+mcporter call dingtalk-ai-table ...
+```
+
+也就是说，当前 OpenClaw / Agent 运行环境里应该已经把 MCP Server 注册为：
+
+```text
+dingtalk-ai-table
+```
+
+这种方式最适合多个 Agent 共用同一个 MCP Server。
+
+Agent 正常业务调用时，不需要知道具体 URL，只需要调用 Python 函数。
+
+### 4.2 兜底方式：设置 DINGTALK_AI_TABLE_DIRECT_URL
+
+如果当前环境没有注册 `dingtalk-ai-table`，可以设置环境变量：
+
+```bash
+export DINGTALK_AI_TABLE_DIRECT_URL="你的 MCP Server URL"
+```
+
+Windows PowerShell：
+
+```powershell
+$env:DINGTALK_AI_TABLE_DIRECT_URL="你的 MCP Server URL"
+```
+
+Windows CMD：
+
+```cmd
+set DINGTALK_AI_TABLE_DIRECT_URL=你的 MCP Server URL
+```
+
+设置后，Python 层会改为调用：
+
+```bash
+mcporter call "$DINGTALK_AI_TABLE_DIRECT_URL" .query_records --args "..."
+```
+
+注意：
+
+- 环境变量名必须是 `DINGTALK_AI_TABLE_DIRECT_URL`
+- 这个变量填写的是 MCP Server URL，不是 `base_id`，也不是 `table_id`
+- 业务代码里不要硬编码 MCP URL
+- 多个 Agent 要访问同一个钉钉 AI 表格 MCP 时，应该使用同一个 URL 或同一个 mcporter 注册名
+- 如果同时存在 mcporter 注册名和 `DINGTALK_AI_TABLE_DIRECT_URL`，Python 层优先使用 `DINGTALK_AI_TABLE_DIRECT_URL`
+
+### 4.3 Agent 判断规则
+
+Agent 遇到 MCP 连接问题时，按这个顺序检查：
+
+1. 是否已安装 `mcporter`
+2. 是否能调用 `mcporter call dingtalk-ai-table ...`
+3. 如果没有注册名，是否设置了 `DINGTALK_AI_TABLE_DIRECT_URL`
+4. MCP URL 是否属于钉钉 AI 表格 MCP Server
+5. 再检查具体业务参数，如 `base_id`、`table_id`、`fieldId`
+
+不要把 MCP URL 和表格资源 ID 混在一起。
+
+## 5. 推荐导入方式
 
 OpenClaw / Agent 优先只调用包根导出的 9 个函数：
 
@@ -100,7 +171,7 @@ from dingtalk_ai_table.filters import (
 )
 ```
 
-## 5. 函数速查
+## 6. 函数速查
 
 | 函数 | 用途 | 什么时候用 |
 |---|---|---|
@@ -114,9 +185,9 @@ from dingtalk_ai_table.filters import (
 | `process_date_range_with_marker(...)` | 日期范围按天处理 | 日期范围查询 / 处理 |
 | `safe_prepare_attachment_upload(...)` | 获取附件上传信息 | 写入附件字段前调用 |
 
-## 6. 基本调用流程
+## 7. 基本调用流程
 
-### 6.1 查询记录
+### 7.1 查询记录
 
 1. 确认 `base_id` 和 `table_id`
 2. 如果需要指定返回字段，先用 `resolve_field_id` 找到字段 ID
@@ -145,7 +216,7 @@ result = safe_query_records(
 )
 ```
 
-### 6.2 新增记录
+### 7.2 新增记录
 
 新增记录时，`cells` 的 key 必须是 `fieldId`。
 
@@ -183,7 +254,7 @@ safe_create_records(
 
 原因：`"姓名"` 是字段名，不是 `fieldId`。
 
-### 6.3 更新记录
+### 7.3 更新记录
 
 更新记录必须提供 `recordId`，并且 `cells` 的 key 必须是 `fieldId`。
 
@@ -210,7 +281,7 @@ result = safe_update_records(
 )
 ```
 
-### 6.4 删除记录
+### 7.4 删除记录
 
 删除记录必须提供 `recordId` 数组，单次最多 100 条。
 
@@ -224,7 +295,7 @@ result = safe_delete_records(
 )
 ```
 
-## 7. 过滤条件用法
+## 8. 过滤条件用法
 
 不要手写复杂 filters，优先用辅助函数。
 
@@ -265,7 +336,7 @@ result = safe_query_records(
 )
 ```
 
-### 7.1 单选 / 多选过滤
+### 8.1 单选 / 多选过滤
 
 单选 / 多选字段过滤时，过滤值必须使用 option id。
 
@@ -286,7 +357,7 @@ result = safe_query_records(
 )
 ```
 
-## 8. 超过 100 条的处理
+## 9. 超过 100 条的处理
 
 `query_records` 单次最多 100 条。
 
@@ -324,7 +395,7 @@ task_marker = process_records_with_marker(
 - 它会修改表格数据，因为要写入查询标记
 - `readonly=True` 会直接报错，因为 filters / sort 场景下只读无法稳定分页
 
-## 9. 日期范围处理
+## 10. 日期范围处理
 
 日期范围不要写 `gte / lte`。
 
@@ -369,7 +440,7 @@ results = process_date_range_with_marker(
 
 日期必须是 `YYYY-MM-DD`。
 
-## 10. 附件上传前置
+## 11. 附件上传前置
 
 写入附件字段前，先调用 `safe_prepare_attachment_upload` 获取上传信息。
 
@@ -394,15 +465,15 @@ upload_info = safe_prepare_attachment_upload(
 - 如果要保留旧附件，需要先读取旧附件，再合并后一起写回
 - 不要默认查询或返回图片 / 附件字段，除非用户明确需要
 
-## 11. 参数和数据格式要求
+## 12. 参数和数据格式要求
 
-### 11.1 资源 ID
+### 12.1 资源 ID
 
 `base_id`、`table_id`、`field_id`、`record_id` 都必须是合法资源 ID。
 
 不要使用字段名、表名、中文名代替 ID。
 
-### 11.2 records
+### 12.2 records
 
 新增记录：
 
@@ -429,7 +500,7 @@ records=[
 ]
 ```
 
-### 11.3 field_ids
+### 12.3 field_ids
 
 如果用户只需要部分字段，传 `field_ids` 限制返回字段，避免无意义拉取大字段。
 
@@ -442,7 +513,7 @@ safe_query_records(
 )
 ```
 
-## 12. 硬限制
+## 13. 硬限制
 
 必须遵守：
 
@@ -465,7 +536,7 @@ safe_query_records(
 - `查询标记` 是唯一允许的辅助分页字段名
 - 附件可靠写入必须先 `prepare_attachment_upload`
 
-## 13. 禁止行为
+## 14. 禁止行为
 
 Agent 不要做这些事：
 
@@ -481,11 +552,27 @@ Agent 不要做这些事：
 - 不要用 `gte / lte` 查询日期范围
 - 不要把图片 / 附件字段默认查出来
 - 不要绕过 Python 安全函数直接拼 MCP 参数
+- 不要在业务代码里硬编码 MCP URL
+- 不要把 MCP URL 当成 `base_id` / `table_id`
 - 不要为了一个需求扩展成完整 SDK 或复杂 CLI
 
-## 14. mcporter 说明
+## 15. mcporter 说明
 
-本项目内部通过 `mcporter call dingtalk-ai-table ...` 调用 MCP。
+本项目内部通过 `mcporter` 调用 MCP。
+
+调用优先级：
+
+1. 如果设置了 `DINGTALK_AI_TABLE_DIRECT_URL`，使用该 URL：
+
+```bash
+mcporter call "$DINGTALK_AI_TABLE_DIRECT_URL" .query_records --args "..."
+```
+
+2. 如果没有设置 `DINGTALK_AI_TABLE_DIRECT_URL`，使用注册名：
+
+```bash
+mcporter call dingtalk-ai-table query_records --args "..."
+```
 
 Agent 正常情况下不需要手写 `mcporter call`。
 只有在调试 MCP 注册状态时，才检查：
@@ -494,29 +581,23 @@ Agent 正常情况下不需要手写 `mcporter call`。
 mcporter list dingtalk-ai-table --schema
 ```
 
-如果当前环境没有注册名，可用环境变量兜底：
+业务调用仍然优先走 Python 安全函数。
 
-```bash
-export DINGTALK_AI_TABLE_DIRECT_URL="你的 MCP Server URL"
-```
+## 16. 选型规则
 
-但业务调用仍然优先走 Python 安全函数。
-
-## 15. 选型规则
-
-### 15.1 用户要查 100 条以内
+### 16.1 用户要查 100 条以内
 
 用 `safe_query_records`。
 
-### 15.2 用户要查带过滤的很多记录
+### 16.2 用户要查带过滤的很多记录
 
 用 `process_records_with_marker`。
 
-### 15.3 用户要查日期范围
+### 16.3 用户要查日期范围
 
 用 `process_date_range_with_marker`。
 
-### 15.4 用户要新增 / 更新 / 删除
+### 16.4 用户要新增 / 更新 / 删除
 
 分别用：
 
@@ -524,19 +605,29 @@ export DINGTALK_AI_TABLE_DIRECT_URL="你的 MCP Server URL"
 - `safe_update_records`
 - `safe_delete_records`
 
-### 15.5 用户只给字段名
+### 16.5 用户只给字段名
 
 先用 `resolve_field_id`。
 
-### 15.6 用户只给单选 / 多选名称
+### 16.6 用户只给单选 / 多选名称
 
 先用 `resolve_option_id`。
 
-### 15.7 用户要附件字段
+### 16.7 用户要附件字段
 
 先用 `safe_prepare_attachment_upload`，拿到上传信息后再处理文件上传和 fileToken 写入。
 
-## 16. 最小完整示例
+### 16.8 用户反馈 MCP 连接失败
+
+先检查：
+
+1. `mcporter` 是否安装
+2. 是否注册了 `dingtalk-ai-table`
+3. 是否设置了 `DINGTALK_AI_TABLE_DIRECT_URL`
+4. URL 是否是钉钉 AI 表格 MCP Server
+5. 再检查业务参数
+
+## 17. 最小完整示例
 
 下面是一个“查待处理记录，并更新状态”的完整示例：
 
@@ -583,9 +674,10 @@ if update_records:
     )
 ```
 
-## 17. 总原则
+## 18. 总原则
 
 优先让 Python 层拦截错误参数。
 不要只依赖提示词约束 Agent 行为。
+MCP URL 只做连接配置，不参与业务参数构造。
 保持实现简单、可读、边界清晰。
 除非真实调用中发现 MCP 返回结构变化，否则不要扩大功能范围。
