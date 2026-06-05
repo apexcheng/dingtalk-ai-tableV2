@@ -34,9 +34,10 @@ def normalize_record(record: Dict[str, Any]) -> Dict[str, Any]:
 
     normalized = {}
     for key, value in cells.items():
+        field_id = ensure_resource_id(key, 'fieldId')
         sanitized = sanitize_record_value(value)
         if sanitized is not None:
-            normalized[key] = sanitized
+            normalized[field_id] = sanitized
     return {'cells': normalized}
 
 

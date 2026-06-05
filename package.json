@@ -44,6 +44,6 @@
     ]
   },
   "scripts": {
-    "test": "python -B -m unittest -v"
+    "test": "python3 -B -m unittest -v"
   }
 }
