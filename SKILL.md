@@ -1,6 +1,6 @@
 ---
 name: dingtalk-ai-table
-description: OpenClaw 调用钉钉 AI 表格 MCP 的安全调用层。Agent 不直接手拼 mcporter 参数，而是优先调用 dingtalk_ai_table 包导出的 Python 函数，由 Python 层完成参数校验、字段 ID 解析、选项 ID 解析、记录增删改查、过滤构造、查询标记分页和附件上传前置。
+description: OpenClaw 调用钉钉 AI 表格 MCP 的安全调用层。Agent 不直接手拼 mcporter 参数，而是优先调用 dingtalk_ai_table 包导出的 Python 函数，由 Python 层完成参数校验、字段 ID 解析、选项 ID 解析、记录增删改查、过滤构造、查询标记分页和附件上传前置。MCP URL 由 MCPORTER_CONFIG 或当前工作目录 config/mcporter.json 隔离配置。
 version: 0.7.3
 metadata:
   author: Marila@Dingtalk
@@ -40,7 +40,7 @@ Agent 使用本 skill 时，遵守下面的优先级：
 5. **带 filters 或 sort 且可能超过 100 条时，用查询标记分页**
 6. **日期范围不要用 gte / lte，必须按天拆成 date_eq**
 7. **写入 cells 时，key 必须是 fieldId，不是字段名**
-8. **MCP URL 优先通过环境变量或 mcporter 注册配置完成，不要写死在代码里**
+8. **MCP URL 只写在 mcporter 配置文件里，不要写死在业务代码里**
 
 ## 2. 什么时候使用
 
@@ -75,69 +75,91 @@ Agent 使用本 skill 时，遵守下面的优先级：
 
 本 skill 通过 `mcporter` 调用钉钉 AI 表格 MCP。
 
-有两种配置方式。
+MCP URL 不在 Python 业务代码里配置，而是在 mcporter 配置文件里配置。
 
-### 4.1 推荐方式：使用 mcporter 注册名
+本项目只使用两层配置优先级：
 
-默认情况下，Python 层会执行：
+1. `MCPORTER_CONFIG` 环境变量：显式指定 mcporter 配置文件路径，优先级最高
+2. `{cwd}/config/mcporter.json`：当前工作目录下的项目级配置
 
-```bash
-mcporter call dingtalk-ai-table ...
-```
+`cwd` 是当前进程的工作目录。
 
-也就是说，当前 OpenClaw / Agent 运行环境里应该已经把 MCP Server 注册为：
+在 OpenClaw 中，每个 Agent 的 workspace 目录就是它运行时的 `cwd`。因此不同 Agent 可以各自在自己的 workspace 下放置：
 
 ```text
-dingtalk-ai-table
+config/mcporter.json
 ```
 
-这种方式最适合多个 Agent 共用同一个 MCP Server。
+这样每个 Agent 会读取自己的 mcporter 配置，从而实现 MCP URL 隔离。
 
-Agent 正常业务调用时，不需要知道具体 URL，只需要调用 Python 函数。
+### 4.1 推荐方式：项目级配置
 
-### 4.2 兜底方式：设置 DINGTALK_AI_TABLE_DIRECT_URL
+在每个 Agent 的 workspace 下创建：
 
-如果当前环境没有注册 `dingtalk-ai-table`，可以设置环境变量：
+```text
+config/mcporter.json
+```
+
+例如：
+
+```text
+review-analyst/
+  config/
+    mcporter.json
+
+live-stream-recorder/
+  config/
+    mcporter.json
+```
+
+只要 Agent 的 `cwd` 是自己的 workspace，Python 层会自动把该文件作为 `MCPORTER_CONFIG` 传给 mcporter。
+
+业务调用仍然使用同一个注册名：
 
 ```bash
-export DINGTALK_AI_TABLE_DIRECT_URL="你的 MCP Server URL"
+mcporter call dingtalk-ai-table query_records --args "..."
+```
+
+真正的 MCP URL 由当前 Agent workspace 下的 `config/mcporter.json` 决定。
+
+### 4.2 显式路径方式：MCPORTER_CONFIG
+
+如果要手动指定配置文件路径，可以设置：
+
+```bash
+export MCPORTER_CONFIG="/path/to/mcporter.json"
 ```
 
 Windows PowerShell：
 
 ```powershell
-$env:DINGTALK_AI_TABLE_DIRECT_URL="你的 MCP Server URL"
+$env:MCPORTER_CONFIG="C:\\path\\to\\mcporter.json"
 ```
 
 Windows CMD：
 
 ```cmd
-set DINGTALK_AI_TABLE_DIRECT_URL=你的 MCP Server URL
+set MCPORTER_CONFIG=C:\path\to\mcporter.json
 ```
 
-设置后，Python 层会改为调用：
+设置后，Python 层会优先使用这个路径，不再自动找 `{cwd}/config/mcporter.json`。
 
-```bash
-mcporter call "$DINGTALK_AI_TABLE_DIRECT_URL" .query_records --args "..."
-```
+### 4.3 配置缺失时
 
-注意：
+如果既没有设置 `MCPORTER_CONFIG`，当前工作目录下也没有 `config/mcporter.json`，Python 层会直接报错。
 
-- 环境变量名必须是 `DINGTALK_AI_TABLE_DIRECT_URL`
-- 这个变量填写的是 MCP Server URL，不是 `base_id`，也不是 `table_id`
-- 业务代码里不要硬编码 MCP URL
-- 多个 Agent 要访问同一个钉钉 AI 表格 MCP 时，应该使用同一个 URL 或同一个 mcporter 注册名
-- 如果同时存在 mcporter 注册名和 `DINGTALK_AI_TABLE_DIRECT_URL`，Python 层优先使用 `DINGTALK_AI_TABLE_DIRECT_URL`
+这是为了避免 Agent 错误地使用全局 mcporter 配置，导致多个 Agent 意外共用同一个 MCP URL。
 
-### 4.3 Agent 判断规则
+### 4.4 Agent 判断规则
 
 Agent 遇到 MCP 连接问题时，按这个顺序检查：
 
-1. 是否已安装 `mcporter`
-2. 是否能调用 `mcporter call dingtalk-ai-table ...`
-3. 如果没有注册名，是否设置了 `DINGTALK_AI_TABLE_DIRECT_URL`
-4. MCP URL 是否属于钉钉 AI 表格 MCP Server
-5. 再检查具体业务参数，如 `base_id`、`table_id`、`fieldId`
+1. 当前 Agent 的 `cwd` 是否正确
+2. 当前 `cwd` 下是否存在 `config/mcporter.json`
+3. 是否显式设置了 `MCPORTER_CONFIG`
+4. mcporter 配置里是否存在 `dingtalk-ai-table` 注册名
+5. 该注册名是否指向正确的钉钉 AI 表格 MCP Server URL
+6. 再检查具体业务参数，如 `base_id`、`table_id`、`fieldId`
 
 不要把 MCP URL 和表格资源 ID 混在一起。
 
@@ -560,19 +582,19 @@ Agent 不要做这些事：
 
 本项目内部通过 `mcporter` 调用 MCP。
 
-调用优先级：
+Python 层调用时会先确定 mcporter 配置文件路径：
 
-1. 如果设置了 `DINGTALK_AI_TABLE_DIRECT_URL`，使用该 URL：
+1. 如果存在 `MCPORTER_CONFIG` 环境变量，使用它指向的配置文件
+2. 否则使用 `{cwd}/config/mcporter.json`
+3. 如果都没有，直接报错，不使用全局兜底配置
 
-```bash
-mcporter call "$DINGTALK_AI_TABLE_DIRECT_URL" .query_records --args "..."
-```
-
-2. 如果没有设置 `DINGTALK_AI_TABLE_DIRECT_URL`，使用注册名：
+然后统一执行：
 
 ```bash
 mcporter call dingtalk-ai-table query_records --args "..."
 ```
+
+`dingtalk-ai-table` 是 mcporter 配置文件里的 MCP Server 注册名。
 
 Agent 正常情况下不需要手写 `mcporter call`。
 只有在调试 MCP 注册状态时，才检查：
@@ -621,11 +643,12 @@ mcporter list dingtalk-ai-table --schema
 
 先检查：
 
-1. `mcporter` 是否安装
-2. 是否注册了 `dingtalk-ai-table`
-3. 是否设置了 `DINGTALK_AI_TABLE_DIRECT_URL`
-4. URL 是否是钉钉 AI 表格 MCP Server
-5. 再检查业务参数
+1. 当前 Agent 的 `cwd` 是否正确
+2. 是否存在 `MCPORTER_CONFIG`
+3. 当前 `cwd` 下是否存在 `config/mcporter.json`
+4. mcporter 配置中是否存在 `dingtalk-ai-table` 注册名
+5. 该注册名是否指向正确的钉钉 AI 表格 MCP Server
+6. 再检查业务参数
 
 ## 17. 最小完整示例
 
@@ -679,5 +702,6 @@ if update_records:
 优先让 Python 层拦截错误参数。
 不要只依赖提示词约束 Agent 行为。
 MCP URL 只做连接配置，不参与业务参数构造。
+每个 Agent 通过自己的 `cwd/config/mcporter.json` 实现 MCP URL 隔离。
 保持实现简单、可读、边界清晰。
 除非真实调用中发现 MCP 返回结构变化，否则不要扩大功能范围。
