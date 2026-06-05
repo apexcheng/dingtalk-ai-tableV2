@@ -1,4 +1,5 @@
 import re
+import time
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional
 
@@ -8,6 +9,7 @@ from .guards import MAX_QUERY_LIMIT, ensure_resource_id
 from .records import extract_records, query_records, update_records
 
 READONLY_MARKER_ERROR = 'filters/sort 场景下超过 100 条且禁止写入查询标记，无法保证稳定分页'
+MARK_SYNC_WAIT_SECONDS = 3
 
 
 def build_task_marker(task_name: str, now: Optional[datetime] = None) -> str:
@@ -74,6 +76,8 @@ def query_with_marker(
 
         if len(batch_records) < MAX_QUERY_LIMIT:
             break
+
+        time.sleep(MARK_SYNC_WAIT_SECONDS)
 
     return task_marker
 
