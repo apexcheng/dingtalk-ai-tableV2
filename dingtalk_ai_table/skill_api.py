@@ -5,19 +5,6 @@ from .fields import get_field_id_by_name, get_option_id_by_name
 from .markers import query_date_range_with_marker, query_with_marker
 from .records import create_records, delete_records, query_records, update_records
 
-SKILL_API_FUNCTIONS = (
-    'resolve_field_id',
-    'resolve_option_id',
-    'safe_query_records',
-    'safe_create_records',
-    'safe_update_records',
-    'safe_delete_records',
-    'process_records_with_marker',
-    'process_date_range_with_marker',
-    'safe_prepare_attachment_upload',
-)
-
-
 def resolve_field_id(base_id: str, table_id: str, field_name: str) -> str:
     """
     按字段名解析 fieldId。
