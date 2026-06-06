@@ -39,12 +39,15 @@ python scripts/aitable.py <subcommand> ...
 - 优先读取 `MCPORTER_CONFIG`，其次读取当前工作目录下的 `config/mcporter.json`
 - `query-records` 默认只返回摘要，不直接输出完整 records
 - `query-records` 单次最多返回 `100` 条，`limit` 不能超过 `100`
+- `query-records` 的 `total` 只表示本次返回的 records 数量，不是服务端全量 count
+- 用户问“有多少条 / 统计数量 / count”时，如果结果可能超过 `100`，不能直接用 `query-records` 的 `total`
 - 不带 `filters` / `sort` 时可以使用 `cursor`；带 `filters` 或 `sort` 时禁止使用 `cursor`
 - 带 `filters` / `sort` 且可能超过 `100` 条时，改用 `process-records-with-marker` 或 `process-date-range-with-marker`
 - `process-records-with-marker` 推荐动作名是 `export-with-marker`
 - `process-records-with-marker` 的 `delete` 不写查询标记
 - `update-records` 当前不支持用来清空字段
 - `process-date-range-with-marker` 的日期范围最多 `366` 天
+- 日期统计场景优先使用 `process-date-range-with-marker`，并读取 `summary.recordCount`
 
 ## 命令选择
 

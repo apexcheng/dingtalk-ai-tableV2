@@ -179,12 +179,21 @@ def get_table_by_name(base_id: str, table_name: str) -> Dict[str, str]:
     if not isinstance(table_name, str) or not table_name.strip():
         raise ValueError('table_name 不能为空')
 
+    target_name = table_name.strip()
     base_result = get_base(base_id)
     tables = _extract_tables(base_result)
+    if not tables:
+        raise ValueError(f'get_base 未返回表列表，无法解析表名：{target_name}')
+
     matched_tables = []
     for table in tables:
-        current_name = table.get('tableName') or table.get('name')
-        if current_name != table_name:
+        current_name = table.get('tableName')
+        if not isinstance(current_name, str):
+            current_name = table.get('name')
+        if not isinstance(current_name, str):
+            continue
+        current_name = current_name.strip()
+        if current_name != target_name:
             continue
         table_id = table.get('tableId') or table.get('id')
         if validate_resource_id(table_id):
@@ -194,7 +203,7 @@ def get_table_by_name(base_id: str, table_name: str) -> Dict[str, str]:
             })
 
     if not matched_tables:
-        raise ValueError(f'未找到表：{table_name}')
+        raise ValueError(f'未找到表：{target_name}')
     if len(matched_tables) > 1:
         raise ValueError('找到多个同名表，请人工确认')
     return matched_tables[0]

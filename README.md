@@ -22,6 +22,8 @@ python scripts/aitable.py <subcommand> ...
 - 所有命令输出仍然是 JSON
 - 复杂参数优先使用 `--input`
 - `query-records` 单次最多返回 `100` 条
+- `query-records` 的 `total` 只表示本次返回的 records 数量，不是服务端全量 count
+- 用户问“有多少条 / 统计数量 / count”时，如果结果可能超过 `100`，不能直接用 `query-records` 的 `total`
 - `limit` 不能超过 `100`
 - 不带 `filters` / `sort` 时可以使用 `cursor`
 - 带 `filters` 或 `sort` 时禁止使用 `cursor`
@@ -67,6 +69,7 @@ resolve-table -> resolve-field -> build-filter -> query-records
 - 失败时也输出 JSON，包含 `ok=false`、`command`、`error.type`、`error.message`
 - `query-records` 默认只输出摘要和最多 `3` 条 `preview`
 - `query-records --output <file>` 时，完整 records 写入 JSONL 文件
+- 日期统计场景优先使用 `process-date-range-with-marker`，并读取 `summary.recordCount`
 - `process-records-with-marker` 必须传 `--output`
 - `process-date-range-with-marker` 必须传 `--output-dir`
 - 大结果不会直接打印到终端
