@@ -127,6 +127,138 @@ class TestCli(unittest.TestCase):
         self.assertNotIn("records", payload["result"])
         self.assertEqual(len(lines), 4)
 
+    def test_process_records_default_action_uses_export_with_marker(self):
+        def fake_process_records_with_marker(**kwargs):
+            kwargs["process_batch"]([])
+            return "task_marker_1"
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            input_path = Path(tmp_dir) / "process.json"
+            output_path = Path(tmp_dir) / "process.jsonl"
+            input_path.write_text(
+                json.dumps(
+                    {
+                        "baseId": "base12345",
+                        "tableId": "table12345",
+                        "filters": {"operator": "eq", "operands": ["fld_1", "a"]},
+                        "output": str(output_path),
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            with patch.object(AITABLE_CLI, "process_records_with_marker", side_effect=fake_process_records_with_marker):
+                exit_code, payload = self.run_cli([
+                    "process-records-with-marker",
+                    "--input", str(input_path),
+                ])
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["result"]["summary"]["action"], "export-with-marker")
+        self.assertEqual(payload["result"]["taskMarker"], "task_marker_1")
+
+    def test_process_records_input_update_action_can_take_effect(self):
+        def fake_process_records_with_marker(**kwargs):
+            kwargs["process_batch"]([{"recordId": "rec_1", "cells": {"fld_1": "a"}}])
+            return "task_marker_2"
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            input_path = Path(tmp_dir) / "process_update.json"
+            output_path = Path(tmp_dir) / "process_update.jsonl"
+            input_path.write_text(
+                json.dumps(
+                    {
+                        "baseId": "base12345",
+                        "tableId": "table12345",
+                        "filters": {"operator": "eq", "operands": ["fld_1", "a"]},
+                        "output": str(output_path),
+                        "action": "update",
+                        "updateCells": {"fld_1": "b"},
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            with patch.object(AITABLE_CLI, "process_records_with_marker", side_effect=fake_process_records_with_marker) as mocked_process, patch.object(AITABLE_CLI, "safe_update_records") as mocked_update:
+                exit_code, payload = self.run_cli([
+                    "process-records-with-marker",
+                    "--input", str(input_path),
+                ])
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["result"]["summary"]["action"], "update")
+        self.assertEqual(payload["result"]["taskMarker"], "task_marker_2")
+        self.assertEqual(mocked_process.call_count, 1)
+        self.assertEqual(mocked_update.call_count, 1)
+
+    def test_process_records_input_delete_action_can_take_effect(self):
+        batches = [
+            {"records": [{"recordId": "rec_1", "cells": {"fld_1": "a"}}]},
+            {"records": []},
+        ]
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            input_path = Path(tmp_dir) / "process_delete.json"
+            output_path = Path(tmp_dir) / "process_delete.jsonl"
+            input_path.write_text(
+                json.dumps(
+                    {
+                        "baseId": "base12345",
+                        "tableId": "table12345",
+                        "filters": {"operator": "eq", "operands": ["fld_1", "a"]},
+                        "output": str(output_path),
+                        "action": "delete",
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            with patch.object(AITABLE_CLI, "safe_query_records", side_effect=batches) as mocked_query, patch.object(AITABLE_CLI, "safe_delete_records") as mocked_delete:
+                exit_code, payload = self.run_cli([
+                    "process-records-with-marker",
+                    "--input", str(input_path),
+                ])
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["result"]["summary"]["action"], "delete")
+        self.assertEqual(mocked_query.call_count, 2)
+        self.assertEqual(mocked_delete.call_count, 1)
+
+    def test_process_records_without_filters_or_sort_fails_before_output_file(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_path = Path(tmp_dir) / "should_not_exist.jsonl"
+            input_path = Path(tmp_dir) / "process_invalid.json"
+            input_path.write_text(
+                json.dumps(
+                    {
+                        "baseId": "base12345",
+                        "tableId": "table12345",
+                        "output": str(output_path),
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            exit_code, payload = self.run_cli([
+                "process-records-with-marker",
+                "--input", str(input_path),
+            ])
+
+            file_exists = output_path.exists()
+
+        self.assertEqual(exit_code, 1)
+        self.assertFalse(payload["ok"])
+        self.assertEqual(payload["error"]["type"], "CliError")
+        self.assertIn("process-records-with-marker 仅适用于带 filters 或 sort 的场景；无过滤条件不要使用", payload["error"]["message"])
+        self.assertFalse(file_exists)
+
     def test_resolve_table_returns_unique_match(self):
         with patch.object(
             AITABLE_CLI,

@@ -450,6 +450,9 @@ def handle_process_records_with_marker(args: argparse.Namespace) -> Any:
     if action == "delete" and filters is None:
         raise CliError("action=delete 时必须提供 filters，禁止无条件批量删除")
 
+    if action != "delete" and filters is None and sort is None:
+        raise CliError("process-records-with-marker 仅适用于带 filters 或 sort 的场景；无过滤条件不要使用")
+
     resolved_output_path = resolve_output_path(output_path)
     with resolved_output_path.open("w", encoding="utf-8") as output_file:
         if action == "delete":
@@ -628,7 +631,7 @@ def add_process_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--action",
         choices=["export-with-marker", "update", "delete", "stats", "collect"],
-        default="export-with-marker",
+        default=None,
         help="导出/更新/删除的批处理动作，stats/collect 为旧别名",
     )
     parser.add_argument("--update-cells-json", help="action=update 时传入 cells JSON")

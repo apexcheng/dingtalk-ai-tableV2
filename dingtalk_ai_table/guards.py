@@ -62,6 +62,8 @@ def normalize_query_limit(limit: Optional[int]) -> int:
 def validate_record_batch(records: Any) -> Any:
     if not isinstance(records, list):
         raise ValueError('records 必须是数组')
+    if not records:
+        raise ValueError('批量参数必须是非空数组')
     if len(records) > MAX_RECORDS_PER_BATCH:
         raise ValueError(f'单次最多 {MAX_RECORDS_PER_BATCH} 条记录')
     return records
@@ -70,6 +72,8 @@ def validate_record_batch(records: Any) -> Any:
 def validate_field_batch(fields: Any) -> Any:
     if not isinstance(fields, list):
         raise ValueError('fields 必须是数组')
+    if not fields:
+        raise ValueError('批量参数必须是非空数组')
     if len(fields) > MAX_FIELDS_PER_CREATE:
         raise ValueError(f'单次最多创建 {MAX_FIELDS_PER_CREATE} 个字段，请拆分后重试')
     return fields
@@ -78,6 +82,8 @@ def validate_field_batch(fields: Any) -> Any:
 def validate_get_tables_batch(table_ids: Any) -> Any:
     if not isinstance(table_ids, list):
         raise ValueError('tableIds 必须是数组')
+    if not table_ids:
+        raise ValueError('批量参数必须是非空数组')
     if len(table_ids) > MAX_TABLES_PER_GET:
         raise ValueError(f'get_tables 单次最多 {MAX_TABLES_PER_GET} 个 tableId')
     return table_ids
@@ -86,6 +92,8 @@ def validate_get_tables_batch(table_ids: Any) -> Any:
 def validate_get_fields_batch(field_ids: Any) -> Any:
     if not isinstance(field_ids, list):
         raise ValueError('fieldIds 必须是数组')
+    if not field_ids:
+        raise ValueError('批量参数必须是非空数组')
     if len(field_ids) > MAX_FIELDS_PER_GET:
         raise ValueError(f'get_fields 单次最多 {MAX_FIELDS_PER_GET} 个 fieldId')
     return field_ids
@@ -133,29 +141,26 @@ def _validate_filter_operands(operator: str, operands: Any) -> None:
     if operator == 'date_eq':
         validate_date_string(operands[1])
     elif field_id and operands[1] is None:
-        raise ValueError(f'{operator} 过滤值不能为空')
+        raise ValueError(f'{operator} 过滤值不能为 null')
 
 
 def validate_filter_tree(filters: Any) -> Any:
     if filters is None:
         return None
-    if isinstance(filters, list):
-        raise ValueError('filters 必须是对象结构，不能是数组')
+
     if not isinstance(filters, dict):
         raise ValueError('filters 必须是对象')
+
     if 'filterType' in filters:
-        raise ValueError('禁止使用 filterType，请改用 filters.operator')
+        raise ValueError('filterType is not supported')
     if 'fieldName' in filters:
-        raise ValueError('过滤字段必须使用 fieldId，不能使用 fieldName')
+        raise ValueError('fieldName is not supported')
 
     operator = filters.get('operator')
-    if not isinstance(operator, str) or not operator:
-        raise ValueError('filters.operator 不能为空')
-
-    if operator in FORBIDDEN_FILTER_OPERATORS:
-        raise ValueError(f'不支持的过滤操作符：{operator}')
-    if operator not in COMPOUND_FILTER_OPERATORS and operator not in SUPPORTED_FILTER_OPERATORS:
-        raise ValueError(f'未确认支持的过滤操作符：{operator}')
+    if operator not in SUPPORTED_FILTER_OPERATORS and operator not in COMPOUND_FILTER_OPERATORS:
+        if operator in FORBIDDEN_FILTER_OPERATORS:
+            raise ValueError(f'当前不支持 {operator} 过滤器，请改用 eq / ne / date_eq')
+        raise ValueError(f'不支持的过滤器操作符: {operator}')
 
     operands = filters.get('operands')
     _validate_filter_operands(operator, operands)
