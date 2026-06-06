@@ -3,6 +3,8 @@ from typing import Any, Dict, List
 
 from .guards import ensure_resource_id, validate_date_string, validate_filter_tree
 
+MAX_DATE_RANGE_DAYS = 366
+
 
 def eq_filter(field_id: str, value: Any) -> Dict[str, Any]:
     ensure_resource_id(field_id, 'fieldId')
@@ -56,6 +58,8 @@ def iter_date_values(start_date: str, end_date: str) -> List[str]:
     end_value = datetime.strptime(end_date, '%Y-%m-%d').date()
     if start_value > end_value:
         raise ValueError('开始日期不能晚于结束日期')
+    if (end_value - start_value).days + 1 > MAX_DATE_RANGE_DAYS:
+        raise ValueError(f'date range too large: max {MAX_DATE_RANGE_DAYS} days')
 
     values = []
     current_value = start_value

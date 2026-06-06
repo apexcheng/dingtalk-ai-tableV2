@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
-"""
-核心安全边界测试
-"""
+"""Core safety boundary tests."""
 
 import json
 import unittest
@@ -51,26 +49,30 @@ class TestQueryLimits(unittest.TestCase):
         self.assertEqual(normalize_query_limit(100), 100)
 
     def test_limit_101_rejected(self):
-        with self.assertRaisesRegex(ValueError, '最大只能是 100'):
+        with self.assertRaisesRegex(ValueError, 'limit'):
             normalize_query_limit(101)
+
+    def test_date_range_max_366_days(self):
+        with self.assertRaisesRegex(ValueError, 'max 366 days'):
+            iter_date_values('2026-01-01', '2027-01-02')
 
 
 class TestFilters(unittest.TestCase):
     def test_filters_array_rejected(self):
-        with self.assertRaisesRegex(ValueError, '不能是数组'):
+        with self.assertRaisesRegex(ValueError, 'filters'):
             validate_filter_tree([])
 
     def test_filter_type_rejected(self):
-        with self.assertRaisesRegex(ValueError, '禁止使用 filterType'):
+        with self.assertRaisesRegex(ValueError, 'filterType'):
             validate_filter_tree({'filterType': 'and', 'operator': 'eq', 'operands': ['fld123456', 'x']})
 
     def test_field_name_rejected(self):
-        with self.assertRaisesRegex(ValueError, '不能使用 fieldName'):
-            validate_filter_tree({'operator': 'eq', 'fieldName': '状态', 'operands': ['fld123456', 'x']})
+        with self.assertRaisesRegex(ValueError, 'fieldName'):
+            validate_filter_tree({'operator': 'eq', 'fieldName': 'status', 'operands': ['fld123456', 'x']})
 
     def test_supported_operators_allowed(self):
-        validate_filter_tree(eq_filter('fld123456', '进行中'))
-        validate_filter_tree(ne_filter('fld123456', '已完成'))
+        validate_filter_tree(eq_filter('fld123456', 'in progress'))
+        validate_filter_tree(ne_filter('fld123456', 'done'))
         validate_filter_tree(date_eq_filter('fld123456', '2026-06-05'))
 
     def test_unsupported_operators_rejected(self):
@@ -89,11 +91,11 @@ class TestFilters(unittest.TestCase):
 
 class TestQueryRecords(unittest.TestCase):
     def test_filters_and_cursor_rejected(self):
-        with self.assertRaisesRegex(ValueError, '禁止传 cursor'):
-            query_records('base12345', 'table12345', filters=eq_filter('fld123456', '进行中'), cursor='next')
+        with self.assertRaisesRegex(ValueError, 'cursor'):
+            query_records('base12345', 'table12345', filters=eq_filter('fld123456', 'in progress'), cursor='next')
 
     def test_sort_and_cursor_rejected(self):
-        with self.assertRaisesRegex(ValueError, '禁止传 cursor'):
+        with self.assertRaisesRegex(ValueError, 'cursor'):
             query_records('base12345', 'table12345', sort=[{'fieldId': 'fld123456'}], cursor='next')
 
     def test_cursor_allowed_without_filters_or_sort(self):
@@ -108,7 +110,7 @@ class TestQueryRecords(unittest.TestCase):
             query_records(
                 'base12345',
                 'table12345',
-                filters=eq_filter('fld123456', '进行中'),
+                filters=eq_filter('fld123456', 'in progress'),
                 field_ids=['fld123456'],
                 limit=100,
             )
@@ -122,15 +124,15 @@ class TestQueryRecords(unittest.TestCase):
 
 class TestRecordPayloads(unittest.TestCase):
     def test_create_payload_structure(self):
-        payload = build_create_records_payload('base12345', 'table12345', [{'cells': {'fld_name': '张三'}}])
+        payload = build_create_records_payload('base12345', 'table12345', [{'cells': {'fld_name': 'Alice'}}])
         self.assertEqual(payload['baseId'], 'base12345')
         self.assertEqual(payload['tableId'], 'table12345')
-        self.assertEqual(payload['records'][0]['cells']['fld_name'], '张三')
+        self.assertEqual(payload['records'][0]['cells']['fld_name'], 'Alice')
 
     def test_update_payload_structure(self):
-        payload = build_update_records_payload('base12345', 'table12345', [{'recordId': 'rec12345', 'cells': {'fld_name': '李四'}}])
+        payload = build_update_records_payload('base12345', 'table12345', [{'recordId': 'rec12345', 'cells': {'fld_name': 'Bob'}}])
         self.assertEqual(payload['records'][0]['recordId'], 'rec12345')
-        self.assertEqual(payload['records'][0]['cells']['fld_name'], '李四')
+        self.assertEqual(payload['records'][0]['cells']['fld_name'], 'Bob')
 
 
 class TestQueryMarker(unittest.TestCase):
@@ -139,7 +141,7 @@ class TestQueryMarker(unittest.TestCase):
 
     def test_query_mark_field_name_alias_rejected(self):
         with self.assertRaisesRegex(ValueError, QUERY_MARK_FIELD_NAME):
-            validate_query_mark_field_name('处理标记')
+            validate_query_mark_field_name('processing marker')
 
     def test_build_task_marker_contains_timestamp(self):
         marker = build_task_marker('export_orders', now=datetime(2026, 6, 5, 12, 34, 56))
@@ -151,7 +153,7 @@ class TestQueryMarker(unittest.TestCase):
                 base_id='base12345',
                 table_id='table12345',
                 process_batch=lambda batch: batch,
-                filters=eq_filter('fld123456', '进行中'),
+                filters=eq_filter('fld123456', 'in progress'),
                 readonly=True,
             )
 

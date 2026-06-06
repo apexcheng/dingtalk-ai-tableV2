@@ -609,7 +609,7 @@ def build_parser() -> JsonArgumentParser:
         ),
         epilog=(
             "Config priority:\n"
-            "  1. agent workspace/config/mcporter.json\n"
+            "  1. MCPORTER_CONFIG\n"
             "  2. current working directory config/mcporter.json\n\n"
             "Examples:\n"
             "  python scripts/aitable.py resolve-field --base-id xxx --table-id xxx --field-name 状态\n"
@@ -690,7 +690,7 @@ def build_parser() -> JsonArgumentParser:
 
     query_records_parser = subparsers.add_parser(
         "query-records",
-        help="查询记录",
+        help="查询记录（单次最多100条；filters/sort 场景禁用 cursor）",
         description="Query records and optionally write the full result to JSONL.",
         formatter_class=HelpFormatter,
     )
@@ -750,7 +750,7 @@ def build_parser() -> JsonArgumentParser:
 
     process_date_range_parser = subparsers.add_parser(
         "process-date-range-with-marker",
-        help="按日期范围使用 marker 处理记录",
+        help="按日期范围使用 marker 处理记录（最多366天）",
         description="Split a date range into daily marker batches.",
         formatter_class=HelpFormatter,
     )

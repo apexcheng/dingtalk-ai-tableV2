@@ -37,10 +37,16 @@ python scripts/aitable.py <subcommand> ...
 - 所有业务调用都走 `scripts/aitable.py`
 - 所有 CLI 输出都保持 JSON
 - 复杂参数优先使用 `--input` JSON 文件
+- 优先读取 `MCPORTER_CONFIG` 指向的配置文件，其次读取当前工作目录下的 `config/mcporter.json`
 - `query-records` 默认只返回摘要，不直接输出完整 records
+- `query-records` 单次最多返回 `100` 条，`limit` 不能超过 `100`
+- 不带 `filters` / `sort` 时，可以使用 `cursor` 翻页；带 `filters` 或 `sort` 时，禁止使用 `cursor`
+- 带 `filters` / `sort` 且可能超过 `100` 条时，改用 `process-records-with-marker` 或 `process-date-range-with-marker`
 - `process-records-with-marker` 推荐动作名是 `export-with-marker`
 - `process-records-with-marker` 的 `delete` 不写查询标记
 - `process-date-range-with-marker` 也走同一套 CLI 入口和 JSON 输出规则
+- `update-records` 会忽略空字符串和 `null` 等空值，因此当前版本不支持通过 `update-records` 清空字段；如果要清空字段，先人工确认，不要默认执行
+- `process-date-range-with-marker` 的日期范围最多 `366` 天
 
 ## CLI 子命令
 

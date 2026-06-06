@@ -12,10 +12,20 @@ python scripts/aitable.py <subcommand> ...
 
 按这个顺序配就行：
 
-1. 优先使用 `agent workspace/config/mcporter.json`
-2. 其次使用当前工作目录下的 `config/mcporter.json`
+1. 优先读取 `MCPORTER_CONFIG` 指向的配置文件
+2. 其次读取当前工作目录下的 `config/mcporter.json`
 
 不要求 `pip install dingtalk_ai_table`，也不要求设置 `PYTHONPATH`。
+
+## 关键边界
+
+- `query-records` 单次最多返回 `100` 条
+- `limit` 不能超过 `100`
+- 不带 `filters` / `sort` 时，可以使用 `cursor` 翻页
+- 带 `filters` 或 `sort` 时，禁止使用 `cursor`
+- 带 `filters` / `sort` 且可能超过 `100` 条时，改用 `process-records-with-marker` 或 `process-date-range-with-marker`
+- 当前 `update-records` 会忽略空字符串和 `null` 等空值，因此不能用它清空字段；如果要清空字段，先人工确认，不要默认执行
+- `process-date-range-with-marker` 的日期范围最多 `366` 天
 
 ## CLI 子命令
 
