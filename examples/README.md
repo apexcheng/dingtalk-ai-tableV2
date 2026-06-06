@@ -1,7 +1,8 @@
 # Examples
 
-This folder only keeps minimal usage notes for reference.
+这个目录放 CLI 输入示例。
 
-```python
-from dingtalk_ai_table import process_date_range_with_marker, safe_query_records
+```bash
+python scripts/aitable.py query-records --input examples/query_records.json --output out/query_records.jsonl
+python scripts/aitable.py create-records --input examples/create_records.json
 ```

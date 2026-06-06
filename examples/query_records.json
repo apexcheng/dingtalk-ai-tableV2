@@ -1,0 +1,12 @@
+{
+  "baseId": "base_xxx",
+  "tableId": "tbl_xxx",
+  "limit": 100,
+  "filters": {
+    "operator": "eq",
+    "operands": [
+      "fld_status_xxx",
+      "进行中"
+    ]
+  }
+}

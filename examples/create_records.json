@@ -1,0 +1,12 @@
+{
+  "baseId": "base_xxx",
+  "tableId": "tbl_xxx",
+  "records": [
+    {
+      "cells": {
+        "fld_name_xxx": "张三",
+        "fld_status_xxx": "进行中"
+      }
+    }
+  ]
+}
