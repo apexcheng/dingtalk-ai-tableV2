@@ -185,17 +185,19 @@ def get_field_id_by_name(base_id: str, table_id: str, field_name: str) -> str:
     if not isinstance(field_name, str) or not field_name.strip():
         raise ValueError("field_name 不能为空")
 
+    target_name = field_name.strip()
     tables_result = get_tables(base_id, [table_id])
     tables = _extract_tables(tables_result)
     if not tables:
         raise ValueError("未找到表结构信息")
 
     for field in tables[0].get("fields", []):
-        if field.get("fieldName") == field_name or field.get("name") == field_name:
+        current_name = str(field.get("fieldName") or field.get("name") or "").strip()
+        if current_name == target_name:
             field_id = field.get("fieldId") or field.get("id")
             if validate_resource_id(field_id):
                 return field_id
-    raise ValueError(f"未找到字段：{field_name}")
+    raise ValueError(f"未找到字段：{target_name}")
 
 
 def get_table_by_name(base_id: str, table_name: str) -> Dict[str, str]:
@@ -237,15 +239,17 @@ def get_option_id_by_name(base_id: str, table_id: str, field_name: str, option_n
     field_result = get_fields(base_id, table_id, [field_id])
     fields = _extract_fields(field_result)
     if not fields:
-        raise ValueError(f"未找到字段配置：{field_name}")
+        raise ValueError(f"未找到字段配置：{field_name.strip() if isinstance(field_name, str) else field_name}")
 
+    target_name = option_name.strip() if isinstance(option_name, str) else option_name
     options = ((fields[0].get("config") or {}).get("options") or [])
     for option in options:
-        if option.get("name") == option_name:
-            option_id = option.get("id")
+        current_name = str(option.get("name") or "").strip()
+        if current_name == target_name:
+            option_id = option.get("id") or option.get("optionId")
             if option_id:
                 return option_id
-    raise ValueError(f"未找到选项：{option_name}")
+    raise ValueError(f"未找到选项：{target_name}")
 
 
 def ensure_query_mark_field(base_id: str, table_id: str) -> str:

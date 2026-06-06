@@ -26,6 +26,13 @@ def sanitize_record_value(value: Any) -> JsonValue:
     return value
 
 
+def validate_update_record_value(value: Any) -> None:
+    if value is None:
+        raise ValueError("update-records 当前不支持清空字段，请不要传 null 或空字符串")
+    if isinstance(value, str) and not value.strip():
+        raise ValueError("update-records 当前不支持清空字段，请不要传 null 或空字符串")
+
+
 def normalize_record(record: Dict[str, Any]) -> Dict[str, Any]:
     if 'cells' in record and isinstance(record['cells'], dict):
         cells = record['cells']
@@ -71,6 +78,8 @@ def build_update_records_payload(base_id: str, table_id: str, records: List[Dict
             cells_source = record['cells']
         else:
             cells_source = {key: value for key, value in record.items() if key != 'recordId'}
+        for value in cells_source.values():
+            validate_update_record_value(value)
         cells = normalize_record({'cells': cells_source})['cells']
         if not cells:
             raise ValueError('更新记录必须包含非空 cells 对象')
