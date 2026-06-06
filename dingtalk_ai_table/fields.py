@@ -131,6 +131,29 @@ def get_base(base_id: str) -> Any:
     return run_mcporter(['get_base', '--args', json.dumps(payload, ensure_ascii=False)])
 
 
+def list_bases(limit: Optional[int] = None, cursor: Optional[str] = None) -> Any:
+    payload: Dict[str, Any] = {}
+    if limit is not None:
+        payload['limit'] = limit
+    if cursor is not None:
+        payload['cursor'] = cursor
+    if payload:
+        return run_mcporter(['list_bases', '--args', json.dumps(payload, ensure_ascii=False)])
+    return run_mcporter(['list_bases'])
+
+
+def search_bases(query: str, limit: Optional[int] = None, cursor: Optional[str] = None) -> Any:
+    if not isinstance(query, str) or not query.strip():
+        raise ValueError('query 不能为空')
+
+    payload: Dict[str, Any] = {'query': query.strip()}
+    if limit is not None:
+        payload['limit'] = limit
+    if cursor is not None:
+        payload['cursor'] = cursor
+    return run_mcporter(['search_bases', '--args', json.dumps(payload, ensure_ascii=False)])
+
+
 def get_fields(base_id: str, table_id: str, field_ids: List[str]) -> Any:
     base_id = ensure_resource_id(base_id, 'baseId')
     table_id = ensure_resource_id(table_id, 'tableId')

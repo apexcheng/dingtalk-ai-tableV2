@@ -26,6 +26,8 @@ class TestCli(unittest.TestCase):
 
     def test_all_subcommands_dispatch(self):
         cases = [
+            ("list-bases", ["--limit", "20", "--cursor", "cursor_1"], "handle_list_bases"),
+            ("search-bases", ["--query", "评价", "--limit", "20"], "handle_search_bases"),
             ("get-tables", ["--base-id", "base12345", "--table-id", "tbl_1"], "handle_get_tables"),
             ("get-base", ["--base-id", "base12345"], "handle_get_base"),
             ("get-fields", ["--base-id", "base12345", "--table-id", "tbl_1", "--field-id", "fld_1"], "handle_get_fields"),
@@ -53,6 +55,46 @@ class TestCli(unittest.TestCase):
                 self.assertEqual(payload["command"], command)
                 self.assertEqual(payload["result"]["handler"], handler_name)
                 mocked.assert_called_once()
+
+    def test_parser_help_includes_base_search_commands(self):
+        help_text = AITABLE_CLI.build_parser().format_help()
+        self.assertIn("list-bases", help_text)
+        self.assertIn("search-bases", help_text)
+
+    def test_list_bases_passes_limit_and_cursor(self):
+        with patch.object(AITABLE_CLI, "list_bases", return_value={"bases": []}) as mocked:
+            exit_code, payload = self.run_cli([
+                "list-bases",
+                "--limit", "20",
+                "--cursor", "cursor_1",
+            ])
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(payload["ok"])
+        mocked.assert_called_once_with(limit=20, cursor="cursor_1")
+
+    def test_search_bases_requires_query(self):
+        exit_code, payload = self.run_cli([
+            "search-bases",
+            "--limit", "20",
+        ])
+
+        self.assertEqual(exit_code, 1)
+        self.assertFalse(payload["ok"])
+        self.assertEqual(payload["error"]["type"], "CliError")
+        self.assertIn("query 不能为空", payload["error"]["message"])
+
+    def test_search_bases_strips_query(self):
+        with patch.object(AITABLE_CLI, "search_bases", return_value={"bases": []}) as mocked:
+            exit_code, payload = self.run_cli([
+                "search-bases",
+                "--query", "  评价  ",
+                "--limit", "20",
+            ])
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(payload["ok"])
+        mocked.assert_called_once_with(query="评价", limit=20, cursor=None)
 
     def test_query_records_with_output_only_returns_summary(self):
         with tempfile.TemporaryDirectory() as tmp_dir:

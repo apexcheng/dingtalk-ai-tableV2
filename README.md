@@ -25,6 +25,7 @@ python scripts/aitable.py <subcommand> ...
 - `query-records` 的 `total` 只表示本次返回的 records 数量，不是服务端全量 count
 - 用户问“有多少条 / 统计数量 / count”时，如果结果可能超过 `100`，不能直接用 `query-records` 的 `total`
 - `limit` 不能超过 `100`
+- 如果不知道 `baseId`，先用 `list-bases` 或 `search-bases`
 - 不带 `filters` / `sort` 时可以使用 `cursor`
 - 带 `filters` 或 `sort` 时禁止使用 `cursor`
 - 带 `filters` / `sort` 且可能超过 `100` 条时，使用 `process-records-with-marker` 或 `process-date-range-with-marker`
@@ -34,6 +35,8 @@ python scripts/aitable.py <subcommand> ...
 ## CLI 子命令
 
 - `get-base`
+- `list-bases`
+- `search-bases`
 - `get-tables`
 - `get-fields`
 - `create-fields`
@@ -52,15 +55,17 @@ python scripts/aitable.py <subcommand> ...
 ## 表查询说明
 
 - `get-base`：按 `baseId` 查询 base 信息和 table 列表
+- `list-bases`：列出可访问的 base
+- `search-bases`：按关键词搜索 base
 - `get-tables`：不是“列出 base 下所有表”
 - `get-tables` 只适用于“已经知道 `tableId`，再按 `tableId` 查询表结构”
 - 如果只知道表名，应先使用 `resolve-table`
-- 当前 CLI 仍然要求先提供 `baseId`，没有新增 `list-bases` / `search-bases`
+- 如果已经知道 `baseId`，不需要先用 `list-bases` / `search-bases`
 
 推荐流程：
 
 ```text
-resolve-table -> resolve-field -> build-filter -> query-records
+search-bases / list-bases -> get-base -> resolve-table -> resolve-field -> build-filter -> query/process
 ```
 
 ## 输出规则
@@ -78,6 +83,8 @@ resolve-table -> resolve-field -> build-filter -> query-records
 
 ```bash
 python scripts/aitable.py get-base --base-id xxx
+python scripts/aitable.py list-bases --limit 20
+python scripts/aitable.py search-bases --query 评价 --limit 20
 python scripts/aitable.py resolve-table --base-id xxx --table-name 评价收集表
 python scripts/aitable.py resolve-field --base-id xxx --table-id xxx --field-name 日期
 python scripts/aitable.py query-records --input examples/query_records.json

@@ -9,7 +9,7 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from dingtalk_ai_table.fields import create_fields, get_base, get_fields, get_tables
+from dingtalk_ai_table.fields import create_fields, get_base, get_fields, get_tables, list_bases, search_bases
 from dingtalk_ai_table.filters import and_filter, date_eq_filter, eq_filter, iter_date_values, ne_filter, or_filter
 from dingtalk_ai_table.guards import validate_filter_tree
 from dingtalk_ai_table.records import extract_records
@@ -164,6 +164,25 @@ def handle_get_base(args: argparse.Namespace) -> Any:
     data = ensure_dict_input(load_input_data(args.input))
     base_id = require_value(pick_scalar(args.base_id, data, "baseId", "base_id"), "baseId")
     return get_base(base_id=base_id)
+
+
+def handle_list_bases(args: argparse.Namespace) -> Any:
+    data = ensure_dict_input(load_input_data(args.input))
+    limit = pick_scalar(args.limit, data, "limit")
+    cursor = pick_scalar(args.cursor, data, "cursor")
+    return list_bases(limit=limit, cursor=cursor)
+
+
+def handle_search_bases(args: argparse.Namespace) -> Any:
+    data = ensure_dict_input(load_input_data(args.input))
+    query = pick_scalar(args.query, data, "query", "keyword")
+    query = require_value(query, "query")
+    if isinstance(query, str):
+        query = query.strip()
+    query = require_value(query, "query")
+    limit = pick_scalar(args.limit, data, "limit")
+    cursor = pick_scalar(args.cursor, data, "cursor")
+    return search_bases(query=query, limit=limit, cursor=cursor)
 
 
 def handle_get_fields(args: argparse.Namespace) -> Any:
@@ -655,6 +674,29 @@ def build_parser() -> JsonArgumentParser:
     add_common_input_argument(get_base_parser)
     get_base_parser.add_argument("--base-id")
     get_base_parser.set_defaults(handler=handle_get_base)
+
+    list_bases_parser = subparsers.add_parser(
+        "list-bases",
+        help="列出可访问的 base",
+        description="List accessible bases.",
+        formatter_class=HelpFormatter,
+    )
+    add_common_input_argument(list_bases_parser)
+    list_bases_parser.add_argument("--limit", type=int)
+    list_bases_parser.add_argument("--cursor")
+    list_bases_parser.set_defaults(handler=handle_list_bases)
+
+    search_bases_parser = subparsers.add_parser(
+        "search-bases",
+        help="按关键词搜索 base",
+        description="Search bases by keyword.",
+        formatter_class=HelpFormatter,
+    )
+    add_common_input_argument(search_bases_parser)
+    search_bases_parser.add_argument("--query")
+    search_bases_parser.add_argument("--limit", type=int)
+    search_bases_parser.add_argument("--cursor")
+    search_bases_parser.set_defaults(handler=handle_search_bases)
 
     get_fields_parser = subparsers.add_parser(
         "get-fields",

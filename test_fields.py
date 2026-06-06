@@ -1,7 +1,29 @@
 import unittest
 from unittest.mock import patch
 
-from dingtalk_ai_table.fields import get_table_by_name
+from dingtalk_ai_table.fields import get_table_by_name, list_bases, search_bases
+
+
+class TestBaseQueryHelpers(unittest.TestCase):
+    def test_list_bases_without_args_calls_mcporter(self):
+        with patch("dingtalk_ai_table.fields.run_mcporter", return_value={"bases": []}) as mocked:
+            result = list_bases()
+
+        self.assertEqual(result, {"bases": []})
+        mocked.assert_called_once_with(["list_bases"])
+
+    def test_search_bases_strips_query_and_builds_args(self):
+        with patch("dingtalk_ai_table.fields.run_mcporter", return_value={"bases": []}) as mocked:
+            result = search_bases("  evaluation  ", limit=10, cursor="cursor_1")
+
+        self.assertEqual(result, {"bases": []})
+        mocked.assert_called_once()
+        args = mocked.call_args.args[0]
+        self.assertEqual(args[0], "search_bases")
+        self.assertEqual(args[1], "--args")
+        self.assertIn('"query": "evaluation"', args[2])
+        self.assertIn('"limit": 10', args[2])
+        self.assertIn('"cursor": "cursor_1"', args[2])
 
 
 class TestGetTableByName(unittest.TestCase):
