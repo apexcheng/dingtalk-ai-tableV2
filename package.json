@@ -1,5 +1,5 @@
 {
-  "name": "dingtalk-ai-table",
+  "name": "dingtalk-ai-table-cli",
   "version": "0.7.3",
   "description": "OpenClaw 用的钉钉 AI 表格 MCP 安全调用层，基于 baseId / tableId / fieldId / recordId 体系。",
   "keywords": [

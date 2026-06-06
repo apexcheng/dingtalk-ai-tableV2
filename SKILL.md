@@ -1,5 +1,5 @@
 ---
-name: dingtalk-ai-table
+name: dingtalk-ai-table-cli
 description: Agent-first safe DingTalk AI Table access via scripts/aitable.py CLI.
 version: 1.1.0
 metadata:
@@ -21,7 +21,7 @@ metadata:
     homepage: https://github.com/apexcheng/dingtalk-ai-tableV2
 ---
 
-# dingtalk-ai-table Skill
+# dingtalk-ai-table-cli Skill
 
 Agent 不直接 `import dingtalk_ai_table`，也不手拼 `mcporter call`。
 

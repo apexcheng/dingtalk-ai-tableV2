@@ -1,4 +1,4 @@
-# dingtalk-ai-tableV2
+# dingtalk-ai-table-cli
 
 这是一个面向 Agent 的钉钉 AI 表格安全 CLI。
 
@@ -8,12 +8,14 @@
 python scripts/aitable.py <subcommand> ...
 ```
 
-## 依赖
+## 配置
 
-- 需要 `mcporter >= 0.8.1`
-- 默认调用 `mcporter call dingtalk-ai-table ...`
-- 不要求 `pip install dingtalk_ai_table`
-- 不要求设置 `PYTHONPATH`
+按这个顺序配就行：
+
+1. 优先使用 `agent workspace/config/mcporter.json`
+2. 其次使用 `DINGTALK_AI_TABLE_DIRECT_URL`
+
+不要求 `pip install dingtalk_ai_table`，也不要求设置 `PYTHONPATH`。
 
 ## CLI 子命令
 

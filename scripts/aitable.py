@@ -34,6 +34,10 @@ class JsonArgumentParser(argparse.ArgumentParser):
         raise CliError(message)
 
 
+class HelpFormatter(argparse.ArgumentDefaultsHelpFormatter, argparse.RawDescriptionHelpFormatter):
+    pass
+
+
 def print_json(data: Dict[str, Any]) -> None:
     print(json.dumps(data, ensure_ascii=False))
 
@@ -588,47 +592,95 @@ def add_process_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--readonly", action="store_true", default=None)
     parser.add_argument(
         "--action",
-        help="export-with-marker | update | delete (stats / collect 为旧别名)",
+        choices=["export-with-marker", "update", "delete", "stats", "collect"],
+        default="export-with-marker",
+        help="导出/更新/删除的批处理动作，stats/collect 为旧别名",
     )
     parser.add_argument("--update-cells-json", help="action=update 时传入 cells JSON")
 
 
 def build_parser() -> JsonArgumentParser:
-    parser = JsonArgumentParser(prog="aitable")
+    parser = JsonArgumentParser(
+        prog="aitable",
+        formatter_class=HelpFormatter,
+        description=(
+            "Agent-first safe CLI for DingTalk AI Table.\n"
+            "The package dingtalk_ai_table is internal implementation only."
+        ),
+        epilog=(
+            "Config priority:\n"
+            "  1. agent workspace/config/mcporter.json\n"
+            "  2. DINGTALK_AI_TABLE_DIRECT_URL\n\n"
+            "Examples:\n"
+            "  python scripts/aitable.py resolve-field --base-id xxx --table-id xxx --field-name 状态\n"
+            "  python scripts/aitable.py query-records --input examples/query_records.json\n"
+            "  python scripts/aitable.py process-records-with-marker --input examples/process_records_with_marker.json\n"
+        ),
+    )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    get_tables_parser = subparsers.add_parser("get-tables", help="查询表结构")
+    get_tables_parser = subparsers.add_parser(
+        "get-tables",
+        help="查询表结构",
+        description="Query table metadata by tableId list.",
+        formatter_class=HelpFormatter,
+    )
     add_common_input_argument(get_tables_parser)
     get_tables_parser.add_argument("--base-id")
     get_tables_parser.add_argument("--table-id", action="append", default=None)
     get_tables_parser.set_defaults(handler=handle_get_tables)
 
-    get_fields_parser = subparsers.add_parser("get-fields", help="查询字段配置")
+    get_fields_parser = subparsers.add_parser(
+        "get-fields",
+        help="查询字段配置",
+        description="Query field metadata by fieldId list.",
+        formatter_class=HelpFormatter,
+    )
     add_common_input_argument(get_fields_parser)
     add_base_table_arguments(get_fields_parser)
     get_fields_parser.add_argument("--field-id", action="append", default=None)
     get_fields_parser.set_defaults(handler=handle_get_fields)
 
-    create_fields_parser = subparsers.add_parser("create-fields", help="创建字段")
+    create_fields_parser = subparsers.add_parser(
+        "create-fields",
+        help="创建字段",
+        description="Create fields in a table.",
+        formatter_class=HelpFormatter,
+    )
     add_common_input_argument(create_fields_parser)
     add_base_table_arguments(create_fields_parser)
     create_fields_parser.add_argument("--field", action="append", default=None, help="单个字段 JSON")
     create_fields_parser.set_defaults(handler=handle_create_fields)
 
-    resolve_field_parser = subparsers.add_parser("resolve-field", help="按字段名解析 fieldId")
+    resolve_field_parser = subparsers.add_parser(
+        "resolve-field",
+        help="按字段名解析 fieldId",
+        description="Resolve fieldId from a field name.",
+        formatter_class=HelpFormatter,
+    )
     add_common_input_argument(resolve_field_parser)
     add_base_table_arguments(resolve_field_parser)
     resolve_field_parser.add_argument("--field-name")
     resolve_field_parser.set_defaults(handler=handle_resolve_field)
 
-    resolve_option_parser = subparsers.add_parser("resolve-option", help="按选项名解析 optionId")
+    resolve_option_parser = subparsers.add_parser(
+        "resolve-option",
+        help="按选项名解析 optionId",
+        description="Resolve optionId from a select option name.",
+        formatter_class=HelpFormatter,
+    )
     add_common_input_argument(resolve_option_parser)
     add_base_table_arguments(resolve_option_parser)
     resolve_option_parser.add_argument("--field-name")
     resolve_option_parser.add_argument("--option-name")
     resolve_option_parser.set_defaults(handler=handle_resolve_option)
 
-    build_filter_parser = subparsers.add_parser("build-filter", help="构建并校验 filters")
+    build_filter_parser = subparsers.add_parser(
+        "build-filter",
+        help="构建并校验 filters",
+        description="Build and validate a filters JSON object.",
+        formatter_class=HelpFormatter,
+    )
     add_common_input_argument(build_filter_parser)
     build_filter_parser.add_argument("--operator")
     build_filter_parser.add_argument("--field-id")
@@ -636,7 +688,12 @@ def build_parser() -> JsonArgumentParser:
     build_filter_parser.add_argument("--operand", action="append", default=None, help="单个 operand JSON")
     build_filter_parser.set_defaults(handler=handle_build_filter)
 
-    query_records_parser = subparsers.add_parser("query-records", help="查询记录")
+    query_records_parser = subparsers.add_parser(
+        "query-records",
+        help="查询记录",
+        description="Query records and optionally write the full result to JSONL.",
+        formatter_class=HelpFormatter,
+    )
     add_common_input_argument(query_records_parser)
     add_base_table_arguments(query_records_parser)
     query_records_parser.add_argument("--record-id", action="append", default=None)
@@ -646,25 +703,45 @@ def build_parser() -> JsonArgumentParser:
     add_query_arguments(query_records_parser)
     query_records_parser.set_defaults(handler=handle_query_records)
 
-    create_records_parser = subparsers.add_parser("create-records", help="创建记录")
+    create_records_parser = subparsers.add_parser(
+        "create-records",
+        help="创建记录",
+        description="Create records in a table.",
+        formatter_class=HelpFormatter,
+    )
     add_common_input_argument(create_records_parser)
     add_base_table_arguments(create_records_parser)
     create_records_parser.add_argument("--record", action="append", default=None, help="单条记录 JSON")
     create_records_parser.set_defaults(handler=handle_create_records)
 
-    update_records_parser = subparsers.add_parser("update-records", help="更新记录")
+    update_records_parser = subparsers.add_parser(
+        "update-records",
+        help="更新记录",
+        description="Update existing records by recordId.",
+        formatter_class=HelpFormatter,
+    )
     add_common_input_argument(update_records_parser)
     add_base_table_arguments(update_records_parser)
     update_records_parser.add_argument("--record", action="append", default=None, help="单条记录 JSON")
     update_records_parser.set_defaults(handler=handle_update_records)
 
-    delete_records_parser = subparsers.add_parser("delete-records", help="删除记录")
+    delete_records_parser = subparsers.add_parser(
+        "delete-records",
+        help="删除记录",
+        description="Delete records by recordId.",
+        formatter_class=HelpFormatter,
+    )
     add_common_input_argument(delete_records_parser)
     add_base_table_arguments(delete_records_parser)
     delete_records_parser.add_argument("--record-id", action="append", default=None)
     delete_records_parser.set_defaults(handler=handle_delete_records)
 
-    process_records_parser = subparsers.add_parser("process-records-with-marker", help="使用 marker 处理记录")
+    process_records_parser = subparsers.add_parser(
+        "process-records-with-marker",
+        help="使用 marker 处理记录",
+        description="Process records in batches; export-with-marker writes query markers.",
+        formatter_class=HelpFormatter,
+    )
     add_common_input_argument(process_records_parser)
     add_base_table_arguments(process_records_parser)
     add_process_arguments(process_records_parser)
@@ -674,6 +751,8 @@ def build_parser() -> JsonArgumentParser:
     process_date_range_parser = subparsers.add_parser(
         "process-date-range-with-marker",
         help="按日期范围使用 marker 处理记录",
+        description="Split a date range into daily marker batches.",
+        formatter_class=HelpFormatter,
     )
     add_common_input_argument(process_date_range_parser)
     add_base_table_arguments(process_date_range_parser)
@@ -687,6 +766,8 @@ def build_parser() -> JsonArgumentParser:
     prepare_attachment_parser = subparsers.add_parser(
         "prepare-attachment-upload",
         help="准备附件上传",
+        description="Prepare attachment upload metadata.",
+        formatter_class=HelpFormatter,
     )
     add_common_input_argument(prepare_attachment_parser)
     prepare_attachment_parser.add_argument("--base-id")
