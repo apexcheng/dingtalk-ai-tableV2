@@ -1,12 +1,12 @@
 {
-  "baseId": "base_xxx",
-  "tableId": "tbl_xxx",
+  "baseId": "base_xxxx",
+  "tableId": "tbl_xxxx",
   "output": "out/process_records.jsonl",
   "action": "export-with-marker",
   "filters": {
     "operator": "eq",
     "operands": [
-      "fld_status_xxx",
+      "fld_status_xxxx",
       "进行中"
     ]
   }

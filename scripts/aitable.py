@@ -414,6 +414,8 @@ def handle_process_records_with_marker(args: argparse.Namespace) -> Any:
         update_cells = parse_json_text(update_cells, "--update-cells-json")
     if action == "update" and not isinstance(update_cells, dict):
         raise CliError("action=update 时必须提供 updateCells")
+    if action == "delete" and filters is None:
+        raise CliError("action=delete 时必须提供 filters，禁止无条件批量删除")
 
     resolved_output_path = resolve_output_path(output_path)
     with resolved_output_path.open("w", encoding="utf-8") as output_file:

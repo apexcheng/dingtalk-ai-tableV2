@@ -43,6 +43,7 @@ python scripts/aitable.py <subcommand> ...
 - 不带 `filters` / `sort` 时，可以使用 `cursor` 翻页；带 `filters` 或 `sort` 时，禁止使用 `cursor`
 - 带 `filters` / `sort` 且可能超过 `100` 条时，改用 `process-records-with-marker` 或 `process-date-range-with-marker`
 - `process-records-with-marker` 推荐动作名是 `export-with-marker`
+- `process-records-with-marker` 适用于带 `filters` 或 `sort` 的批处理场景；无过滤条件时不要使用。
 - `process-records-with-marker` 的 `delete` 不写查询标记
 - `process-date-range-with-marker` 也走同一套 CLI 入口和 JSON 输出规则
 - `update-records` 会忽略空字符串和 `null` 等空值，因此当前版本不支持通过 `update-records` 清空字段；如果要清空字段，先人工确认，不要默认执行

@@ -1,10 +1,10 @@
 {
-  "baseId": "base_xxx",
-  "tableId": "tbl_xxx",
+  "baseId": "base_xxxx",
+  "tableId": "tbl_xxxx",
   "records": [
     {
       "cells": {
-        "fld_name_xxx": "张三"
+        "fld_name_xxxx": "张三"
       }
     }
   ]

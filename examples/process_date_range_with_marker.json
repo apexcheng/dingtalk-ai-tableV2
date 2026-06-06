@@ -1,7 +1,7 @@
 {
-  "baseId": "base_xxx",
-  "tableId": "tbl_xxx",
-  "dateFieldId": "fld_date_xxx",
+  "baseId": "base_xxxx",
+  "tableId": "tbl_xxxx",
+  "dateFieldId": "fld_date_xxxx",
   "startDate": "2026-06-01",
   "endDate": "2026-06-07",
   "outputDir": "out/daily",

@@ -52,6 +52,7 @@ python scripts/aitable.py <subcommand> ...
 - `process-records-with-marker` 必须传 `--output`
 - `process-date-range-with-marker` 必须传 `--output-dir`
 - `process-records-with-marker` 推荐使用 `export-with-marker`，这个动作会写入查询标记
+- `process-records-with-marker` 适用于带 `filters` 或 `sort` 的批处理场景；无过滤条件时不要使用。
 - `process-records-with-marker` 的 `delete` 不写查询标记，只做“查询一批、删一批、直到为空”
 - 大结果不会直接打印到终端
 

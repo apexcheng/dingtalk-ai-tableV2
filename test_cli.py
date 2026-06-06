@@ -97,6 +97,7 @@ class TestCli(unittest.TestCase):
                     "process-records-with-marker",
                     "--base-id", "base12345",
                     "--table-id", "table12345",
+                    "--filters-json", '{"operator":"eq","operands":["fld_1","a"]}',
                     "--output", str(output_path),
                     "--action", "delete",
                 ])
@@ -111,6 +112,25 @@ class TestCli(unittest.TestCase):
         self.assertEqual(len(lines), 3)
         self.assertEqual(query_mock.call_count, 3)
         self.assertEqual(delete_mock.call_count, 2)
+
+    def test_process_records_delete_requires_filters(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_path = Path(tmp_dir) / "delete.jsonl"
+            with patch.object(AITABLE_CLI, "safe_query_records") as query_mock, patch.object(AITABLE_CLI, "safe_delete_records") as delete_mock:
+                exit_code, payload = self.run_cli([
+                    "process-records-with-marker",
+                    "--base-id", "base12345",
+                    "--table-id", "table12345",
+                    "--output", str(output_path),
+                    "--action", "delete",
+                ])
+
+        self.assertEqual(exit_code, 1)
+        self.assertFalse(payload["ok"])
+        self.assertEqual(payload["error"]["type"], "CliError")
+        self.assertIn("action=delete 时必须提供 filters", payload["error"]["message"])
+        query_mock.assert_not_called()
+        delete_mock.assert_not_called()
 
     def test_process_date_range_with_marker_writes_daily_jsonl(self):
         def fake_process_records_with_marker(**kwargs):
