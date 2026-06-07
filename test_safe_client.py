@@ -24,7 +24,7 @@ from dingtalk_ai_table.guards import (
     validate_filter_tree,
     validate_query_mark_field_name,
 )
-from dingtalk_ai_table.markers import READONLY_MARKER_ERROR, build_task_marker, query_date_range_with_marker, query_with_marker
+from dingtalk_ai_table.markers import READONLY_MARKER_ERROR, _extract_record_id, build_task_marker, query_date_range_with_marker, query_with_marker
 from dingtalk_ai_table.records import build_create_records_payload, build_update_records_payload, normalize_query_filters, query_records
 
 
@@ -90,12 +90,22 @@ class TestFilters(unittest.TestCase):
 
 
 class TestQueryRecords(unittest.TestCase):
-    def test_filters_and_cursor_rejected(self):
-        with self.assertRaisesRegex(ValueError, 'cursor'):
-            query_records('base12345', 'table12345', filters=eq_filter('fld123456', 'in progress'), cursor='next')
+    def test_filters_and_cursor_allowed(self):
+        # filters + cursor 是允许的（v1.3+），只有 sort + cursor 被禁。
+        with patch('dingtalk_ai_table.records.run_mcporter', return_value={'records': []}) as mocked_run:
+            query_records(
+                'base12345',
+                'table12345',
+                filters=eq_filter('fld123456', 'in progress'),
+                cursor='next',
+            )
+        mocked_run.assert_called_once()
+        payload = json.loads(mocked_run.call_args.args[0][2])
+        self.assertEqual(payload['cursor'], 'next')
+        self.assertIn('filters', payload)
 
     def test_sort_and_cursor_rejected(self):
-        with self.assertRaisesRegex(ValueError, 'cursor'):
+        with self.assertRaisesRegex(ValueError, 'sort.*cursor|cursor.*sort'):
             query_records('base12345', 'table12345', sort=[{'fieldId': 'fld123456'}], cursor='next')
 
     def test_cursor_allowed_without_filters_or_sort(self):
@@ -278,6 +288,50 @@ class TestQueryMarker(unittest.TestCase):
         self.assertEqual(mocked_query.call_count, 2)
         self.assertEqual(mocked_query.call_args_list[0].kwargs['filters'], date_eq_filter('fld123456', '2026-06-05'))
         self.assertEqual(mocked_query.call_args_list[1].kwargs['filters'], date_eq_filter('fld123456', '2026-06-06'))
+
+    def test_extract_record_id_accepts_recordId(self):
+        self.assertEqual(_extract_record_id({'recordId': 'rec12345'}), 'rec12345')
+
+    def test_extract_record_id_accepts_id(self):
+        # clean_payload 依赖该函数同时接受 id / recordId。
+        self.assertEqual(_extract_record_id({'id': 'rec12345'}), 'rec12345')
+
+    def test_extract_record_id_raises_when_missing(self):
+        with self.assertRaisesRegex(ValueError, 'recordId'):
+            _extract_record_id({})
+
+    def test_query_with_marker_fallback_write_failure_raises(self):
+        # 验证：marker 写入查询标记 fallback 单条重试也失败时，不能 except: pass，
+        # 必须报错中断，避免漏写标记后 cursor 推进重复处理。
+        from dingtalk_ai_table.client import TruncatedResponseError
+
+        batch_record = {'recordId': 'rec12345', 'cells': {}}
+        truncated = TruncatedResponseError('truncated', suggested_limit=None)
+
+        with patch('dingtalk_ai_table.markers.ensure_query_mark_field', return_value='fld_mark_xx'), \
+             patch('dingtalk_ai_table.markers.query_records', side_effect=[
+                 # 第一次调用：拉取一批数据。
+                 {'records': [batch_record]},
+                 # 第二次调用：verify-by-record_ids 截断。
+                 truncated,
+                 # 第三次调用：fallback 单条重试，仍然报错。
+                 RuntimeError('single record query failed'),
+             ]), \
+             patch('dingtalk_ai_table.markers.update_records') as mocked_update:
+            with self.assertRaises(RuntimeError) as ctx:
+                query_with_marker(
+                    base_id='base12345',
+                    table_id='table12345',
+                    process_batch=lambda batch: batch,
+                    filters=eq_filter('fld123456', 'in progress'),
+                    task_name='export_orders',
+                )
+
+        message = str(ctx.exception)
+        self.assertIn('rec12345', message)
+        self.assertIn('漏数据', message)
+        # 只可重试一次 fallback，不能再重试就崩。
+        self.assertEqual(mocked_update.call_count, 0)
 
 
 if __name__ == '__main__':

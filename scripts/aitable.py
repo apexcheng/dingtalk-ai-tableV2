@@ -141,8 +141,6 @@ def normalize_process_action(action: Optional[str]) -> str:
         return "export-with-marker"
 
     normalized = action.strip()
-    if normalized in {"stats", "collect"}:
-        return "export-with-marker"
     if normalized in {"export-with-marker", "update", "delete"}:
         return normalized
     raise CliError(f"不支持的 action: {action}")
@@ -543,7 +541,7 @@ def handle_process_records_with_marker(args: argparse.Namespace) -> Any:
             field_ids=field_ids,
             keyword=pick_scalar(args.keyword, data, "keyword"),
             task_name=pick_scalar(args.task_name, data, "taskName", "task_name", default="batch_task"),
-            readonly=pick_scalar(args.readonly, data, "readonly", default=False),
+            readonly=pick_scalar(None, data, "readonly", default=False),
         )
     payload = {
         "taskMarker": task_marker,
@@ -591,7 +589,7 @@ def handle_process_date_range_with_marker(args: argparse.Namespace) -> Any:
 
     resolved_output_dir = resolve_output_path(str(Path(output_dir) / "placeholder.jsonl")).parent
     task_name = pick_scalar(args.task_name, data, "taskName", "task_name", default="date_range_task")
-    readonly = pick_scalar(args.readonly, data, "readonly", default=False)
+    readonly = pick_scalar(None, data, "readonly", default=False)
     field_ids, excluded_fields = resolve_default_field_ids(args, data, base_id, table_id)
     keyword = pick_scalar(args.keyword, data, "keyword")
 
@@ -702,12 +700,11 @@ def add_query_arguments(parser: argparse.ArgumentParser) -> None:
 def add_process_arguments(parser: argparse.ArgumentParser) -> None:
     add_query_arguments(parser)
     parser.add_argument("--task-name")
-    parser.add_argument("--readonly", action="store_true", default=None)
     parser.add_argument(
         "--action",
-        choices=["export-with-marker", "update", "delete", "stats", "collect"],
+        choices=["export-with-marker", "update", "delete"],
         default=None,
-        help="导出/更新/删除的批处理动作，stats/collect 为旧别名",
+        help="导出/更新/删除的批处理动作，推荐 export-with-marker",
     )
     parser.add_argument("--update-cells-json", help="action=update 时传入 cells JSON")
 

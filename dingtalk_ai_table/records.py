@@ -8,7 +8,7 @@ from .guards import (
     ensure_resource_id,
     normalize_query_limit,
     validate_filter_tree,
-    validate_no_cursor_with_filters_or_sort,
+    validate_no_cursor_with_sort,
     validate_record_batch,
 )
 
@@ -149,7 +149,7 @@ def query_records(
     table_id = ensure_resource_id(table_id, 'tableId')
     query_limit = normalize_query_limit(limit)
     if not _internal_cursor_ok:
-        validate_no_cursor_with_filters_or_sort(filters, sort, cursor)
+        validate_no_cursor_with_sort(sort, cursor)
     validate_filter_tree(filters)
     payload_filters = normalize_query_filters(filters)
 

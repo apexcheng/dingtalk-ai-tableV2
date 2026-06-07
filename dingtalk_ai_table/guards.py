@@ -99,9 +99,16 @@ def validate_get_fields_batch(field_ids: Any) -> Any:
     return field_ids
 
 
+def validate_no_cursor_with_sort(sort: Any, cursor: Any) -> None:
+    if cursor not in (None, "") and sort is not None:
+        raise ValueError("sort 场景下禁止传 cursor，必须改用查询标记推进")
+
+
+# Backward-compatible alias for older call sites.
+# filters + cursor is now allowed; only sort + cursor is rejected.
 def validate_no_cursor_with_filters_or_sort(filters: Any, sort: Any, cursor: Any) -> None:
-    if cursor not in (None, "") and (filters is not None or sort is not None):
-        raise ValueError("filters 或 sort 场景下禁止传 cursor，必须改用查询标记推进")
+    del filters
+    return validate_no_cursor_with_sort(sort, cursor)
 
 
 def validate_date_string(value: Any) -> str:

@@ -11,6 +11,10 @@ from .client import TruncatedResponseError
 
 READONLY_MARKER_ERROR = 'filters/sort 场景下超过 100 条且禁止写入查询标记，无法保证稳定分页'
 MARK_SYNC_WAIT_SECONDS = 3
+# marker 回写查询标记失败时报错信息中含此前缀；外层
+# `except RuntimeError` 会先检查这个 sentinel，确保新抛出的错误
+# 不会袸当成 “update 截断、靠 cursor 推进” 的路径误吞。
+MARK_WRITE_ABORT_SENTINEL = '写入查询标记失败，recordId='
 
 
 def build_task_marker(task_name: str, now: Optional[datetime] = None) -> str:
@@ -107,7 +111,7 @@ def query_with_marker(
             updated_verify = extract_records(result_verify)
             # Build clean payload from verified records.
             clean_payload = [
-                {'recordId': rec['recordId'], 'cells': {mark_field_id: task_marker}}
+                {'recordId': _extract_record_id(rec), 'cells': {mark_field_id: task_marker}}
                 for rec in updated_verify
             ]
             if clean_payload:
@@ -115,21 +119,29 @@ def query_with_marker(
         except TruncatedResponseError:
             # record_ids query itself truncated; fall back to one-by-one.
             for record in update_payload:
+                record_id = _extract_record_id(record)
                 try:
                     result_one = query_records(
                         base_id=base_id,
                         table_id=table_id,
-                        record_ids=[record['recordId']],
+                        record_ids=[record_id],
                         field_ids=[mark_field_id],
                         limit=1,
                     )
                     updated_one = extract_records(result_one)
                     if updated_one:
                         update_records(base_id, table_id, [record])
-                except Exception:
-                    # Skip on failure.
-                    pass
+                except Exception as exc:
+                    # Fallback 单条写入查询标记失败：不要静默跳过，
+                    # 改为报错中断 marker 流程，避免批量处理中漏写标记、
+                    # 后续 cursor 推进时重复处理同一条记录。
+                    raise RuntimeError(
+                        f"写入查询标记失败，recordId={record_id}，已停止处理以避免漏数据: {exc}"
+                    ) from exc
         except RuntimeError as exc:
+            # marker 写入必须失败、不能被当成 “update 截断” 处理。
+            if MARK_WRITE_ABORT_SENTINEL in str(exc):
+                raise
             # update_records response truncated; server update succeeded.
             # Advance via cursor to avoid re-fetching same records.
             cursor = result.get('data', {}).get('nextCursor')

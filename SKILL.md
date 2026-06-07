@@ -41,8 +41,10 @@ python scripts/aitable.py <subcommand> ...
 - `query-records` 的 `total` 只表示本次返回的 records 数量，不是服务端全量 count
 - 用户问“有多少条 / 统计数量 / count”时，如果结果可能超过 `100`，不能直接用 `query-records` 的 `total`
 - 如果不知道 `baseId`，先用 `list-bases` 或 `search-bases`
-- 不带 `filters` / `sort` 时可以使用 `cursor`；带 `filters` 或 `sort` 时禁止使用 `cursor`
-- 带 `filters` / `sort` 且结果可能超过 `100` 条时，改用 `process-records-with-marker` 或 `process-date-range-with-marker`
+- `filters + cursor` 允许
+- `sort + cursor` 暂不允许
+- 大批量只读查询可以用 `query-records + cursor` 分页
+- 会修改数据集的批处理仍优先用 `process-records-with-marker` / `process-date-range-with-marker`
 - `process-records-with-marker` / `process-date-range-with-marker` 都不支持 `sort`（marker 回写会改结果集，排序分页会造成重复和漏数据，只接受 `filters`）
 - `process-records-with-marker` 推荐动作名是 `export-with-marker`
 - `process-records-with-marker` 的 `delete` 不写查询标记
