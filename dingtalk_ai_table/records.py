@@ -3,6 +3,8 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 from .client import run_mcporter
 from .guards import (
+    COMPOUND_FILTER_OPERATORS,
+    SUPPORTED_FILTER_OPERATORS,
     ensure_resource_id,
     normalize_query_limit,
     validate_filter_tree,
@@ -108,6 +110,29 @@ def extract_records(result: Any) -> List[Dict[str, Any]]:
     return []
 
 
+def normalize_query_filters(filters: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Wrap a flat leaf filter in a compound ``and`` for the MCP server.
+
+    The current ``query_records`` MCP endpoint requires the top-level
+    ``filters.operator`` to be a compound (``and`` / ``or``) and silently
+    ignores flat leaves like ``{operator: date_eq, operands: [...]}``.
+    This helper keeps the public filter shape unchanged for callers
+    (``build-filter`` / CLI / input files) and only adapts the value
+    right before it is sent to MCP.
+    """
+    if filters is None:
+        return None
+
+    operator = filters.get('operator') if isinstance(filters, dict) else None
+    if operator in COMPOUND_FILTER_OPERATORS:
+        return filters
+    if operator in SUPPORTED_FILTER_OPERATORS:
+        return {'operator': 'and', 'operands': [filters]}
+
+    # Leave invalid shapes to validate_filter_tree so the real error surfaces.
+    return filters
+
+
 def query_records(
     base_id: str,
     table_id: str,
@@ -124,6 +149,7 @@ def query_records(
     query_limit = normalize_query_limit(limit)
     validate_no_cursor_with_filters_or_sort(filters, sort, cursor)
     validate_filter_tree(filters)
+    payload_filters = normalize_query_filters(filters)
 
     payload = {
         'baseId': base_id,
@@ -134,8 +160,8 @@ def query_records(
     if record_ids is not None:
         validate_record_batch(record_ids)
         payload['recordIds'] = [ensure_resource_id(record_id, 'recordId') for record_id in record_ids]
-    if filters is not None:
-        payload['filters'] = filters
+    if payload_filters is not None:
+        payload['filters'] = payload_filters
     if keyword is not None:
         payload['keyword'] = keyword
     if sort is not None:

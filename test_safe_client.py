@@ -17,7 +17,7 @@ from dingtalk_ai_table import (
     safe_query_records,
     safe_update_records,
 )
-from dingtalk_ai_table.filters import date_eq_filter, eq_filter, iter_date_values, ne_filter
+from dingtalk_ai_table.filters import and_filter, date_eq_filter, eq_filter, iter_date_values, ne_filter, or_filter
 from dingtalk_ai_table.guards import (
     QUERY_MARK_FIELD_NAME,
     normalize_query_limit,
@@ -25,7 +25,7 @@ from dingtalk_ai_table.guards import (
     validate_query_mark_field_name,
 )
 from dingtalk_ai_table.markers import READONLY_MARKER_ERROR, build_task_marker, query_date_range_with_marker, query_with_marker
-from dingtalk_ai_table.records import build_create_records_payload, build_update_records_payload, query_records
+from dingtalk_ai_table.records import build_create_records_payload, build_update_records_payload, normalize_query_filters, query_records
 
 
 class TestPublicEntryPoints(unittest.TestCase):
@@ -120,6 +120,108 @@ class TestQueryRecords(unittest.TestCase):
         self.assertEqual(payload['limit'], 100)
         self.assertIn('filters', payload)
         self.assertEqual(payload['fieldIds'], ['fld123456'])
+
+
+class TestQueryFilterNormalization(unittest.TestCase):
+    """The MCP server requires compound top-level filters and silently
+    ignores flat leaves. query_records() must auto-wrap leaves so the
+    public API still accepts the flat shape produced by build-filter.
+    """
+
+    def test_none_passthrough(self):
+        self.assertIsNone(normalize_query_filters(None))
+
+    def test_date_eq_leaf_is_wrapped_in_and(self):
+        leaf = date_eq_filter('fld_date', '2026-06-03')
+        normalized = normalize_query_filters(leaf)
+        self.assertEqual(normalized, {
+            'operator': 'and',
+            'operands': [{'operator': 'date_eq', 'operands': ['fld_date', '2026-06-03']}],
+        })
+
+    def test_eq_leaf_is_wrapped_in_and(self):
+        leaf = eq_filter('fld123456', 'in progress')
+        normalized = normalize_query_filters(leaf)
+        self.assertEqual(normalized, {
+            'operator': 'and',
+            'operands': [{'operator': 'eq', 'operands': ['fld123456', 'in progress']}],
+        })
+
+    def test_ne_leaf_is_wrapped_in_and(self):
+        leaf = ne_filter('fld123456', 'in progress')
+        normalized = normalize_query_filters(leaf)
+        self.assertEqual(normalized, {
+            'operator': 'and',
+            'operands': [{'operator': 'ne', 'operands': ['fld123456', 'in progress']}],
+        })
+
+    def test_existing_and_is_not_re_wrapped(self):
+        compound = and_filter(eq_filter('fld_a', 'x'), date_eq_filter('fld_b', '2026-06-03'))
+        normalized = normalize_query_filters(compound)
+        self.assertEqual(normalized, compound)
+
+    def test_existing_or_is_not_re_wrapped(self):
+        compound = or_filter(eq_filter('fld_a', 'x'), eq_filter('fld_a', 'y'))
+        normalized = normalize_query_filters(compound)
+        self.assertEqual(normalized, compound)
+
+    def test_query_records_sends_wrapped_payload(self):
+        with patch('dingtalk_ai_table.records.run_mcporter', return_value={'records': []}) as mocked_run:
+            query_records(
+                'base12345',
+                'table12345',
+                filters=date_eq_filter('fld_date', '2026-06-03'),
+                limit=10,
+            )
+        payload = json.loads(mocked_run.call_args.args[0][2])
+        self.assertEqual(payload['filters'], {
+            'operator': 'and',
+            'operands': [{'operator': 'date_eq', 'operands': ['fld_date', '2026-06-03']}],
+        })
+
+    def test_query_records_preserves_existing_and(self):
+        compound = and_filter(
+            eq_filter('fld_a', 'x'),
+            date_eq_filter('fld_b', '2026-06-03'),
+        )
+        with patch('dingtalk_ai_table.records.run_mcporter', return_value={'records': []}) as mocked_run:
+            query_records(
+                'base12345',
+                'table12345',
+                filters=compound,
+                limit=10,
+            )
+        payload = json.loads(mocked_run.call_args.args[0][2])
+        self.assertEqual(payload['filters'], compound)
+
+    def test_query_records_does_not_use_filter_key(self):
+        with patch('dingtalk_ai_table.records.run_mcporter', return_value={'records': []}) as mocked_run:
+            query_records(
+                'base12345',
+                'table12345',
+                filters=eq_filter('fld_a', 'x'),
+                limit=10,
+            )
+        payload = json.loads(mocked_run.call_args.args[0][2])
+        # MCP 参数名仍为 filters，绝不改成 filter。
+        self.assertIn('filters', payload)
+        self.assertNotIn('filter', payload)
+
+    def test_safe_query_records_also_wraps_leaf(self):
+        # 安全入口 (skill_api.safe_query_records) 也走 query_records，
+        # 所以需要同样生效。
+        with patch('dingtalk_ai_table.records.run_mcporter', return_value={'records': []}) as mocked_run:
+            safe_query_records(
+                'base12345',
+                'table12345',
+                filters=date_eq_filter('fld_date', '2026-06-03'),
+                limit=10,
+            )
+        payload = json.loads(mocked_run.call_args.args[0][2])
+        self.assertEqual(payload['filters'], {
+            'operator': 'and',
+            'operands': [{'operator': 'date_eq', 'operands': ['fld_date', '2026-06-03']}],
+        })
 
 
 class TestRecordPayloads(unittest.TestCase):
