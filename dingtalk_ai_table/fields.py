@@ -59,24 +59,34 @@ def resolve_light_field_ids(
     return light, excluded
 
 
+HEAVY_FIELD_FETCH_ERROR = (
+    "无法获取字段结构，不能安全排除图片/附件字段。"
+    "请重试，或显式传 --field-id，只读取必要字段；"
+    "如果确实需要全字段，再传 --include-heavy-fields。"
+)
+
+
 def fetch_light_field_ids(
     base_id: str,
     table_id: str,
 ) -> Tuple[List[str], List[Dict[str, Any]]]:
     """通过 get_tables 拉字段摘要，拆出轻字段与被跳过的重字段。
 
-    任何 get_tables 异常 / 表结构为空都会返回 ([], [])，让调用方走“全字段”默认行为。
+    任何 get_tables 异常 / 表结构为空都会直接报错，不再静默回退到“全字段查询”——
+    静默回退会让“重字段”被误返，破坏“默认排除重字段”的安全目标。
     """
     try:
         tables_result = get_tables(base_id, [table_id])
-    except Exception:
-        return [], []
+    except Exception as exc:
+        raise RuntimeError(f"{HEAVY_FIELD_FETCH_ERROR}（get_tables 失败：{exc}）") from exc
     tables = _extract_tables(tables_result)
     if not tables:
-        return [], []
+        raise RuntimeError(f"{HEAVY_FIELD_FETCH_ERROR}（get_tables 未返回表结构）")
     fields = tables[0].get("fields") or []
     if not isinstance(fields, list):
-        return [], []
+        raise RuntimeError(f"{HEAVY_FIELD_FETCH_ERROR}（表结构中 fields 不是列表）")
+    if not fields:
+        raise RuntimeError(f"{HEAVY_FIELD_FETCH_ERROR}（表结构中 fields 为空）")
     return resolve_light_field_ids(fields)
 
 

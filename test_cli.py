@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 
@@ -16,6 +17,20 @@ SPEC.loader.exec_module(AITABLE_CLI)
 
 
 class TestCli(unittest.TestCase):
+    def setUp(self):
+        # These tests predate the heavy-field auto-exclusion feature; they assume
+        # the CLI just runs without ever calling get_tables. Provide a safe default
+        # schema so tests that don't care about field selection keep working.
+        self._default_light_patcher = patch.object(
+            AITABLE_CLI,
+            'fetch_light_field_ids',
+            return_value=(['fld_default_a', 'fld_default_b'], []),
+        )
+        self._default_light_patcher.start()
+
+    def tearDown(self):
+        self._default_light_patcher.stop()
+
     def run_cli(self, argv):
         stdout = io.StringIO()
         with redirect_stdout(stdout):
@@ -923,16 +938,75 @@ class TestHeavyFieldAutoExclusion(unittest.TestCase):
         self.assertIsNone(kwargs["field_ids"])
         self.assertNotIn("excludedFields", payload["result"])
 
-    def test_query_records_get_tables_failure_falls_back_to_all_fields(self):
-        with patch.object(AITABLE_CLI, "fetch_light_field_ids", return_value=([], [])) as mocked_fetch, patch.object(AITABLE_CLI, "safe_query_records", return_value={"records": []}) as mocked_query:
+    def test_query_records_get_tables_failure_raises_instead_of_silently_returning_all_fields(self):
+        # 拉不到 schema 也不能静默退回到“全字段”查询。
+        with patch.object(AITABLE_CLI, "fetch_light_field_ids", side_effect=RuntimeError("无法获取字段结构")):
             exit_code, payload = self.run_cli([
                 "query-records",
                 "--base-id", "base12345",
                 "--table-id", "table12345",
             ])
 
+        self.assertEqual(exit_code, 1)
+        self.assertFalse(payload["ok"])
+        self.assertIn("无法获取字段结构", payload["error"]["message"])
+
+    def test_query_records_input_include_heavy_fields_camel_case_skips_auto_exclusion(self):
+        with patch.object(AITABLE_CLI, "fetch_light_field_ids") as mocked_fetch, patch.object(AITABLE_CLI, "safe_query_records", return_value={"records": []}) as mocked_query:
+            exit_code, payload = self.run_cli([
+                "query-records",
+                "--base-id", "base12345",
+                "--table-id", "table12345",
+                "--filters-json", '{"operator":"date_eq","operands":["fld_date","2026-06-03"]}',
+                "--include-heavy-fields",
+            ])
         self.assertEqual(exit_code, 0)
-        mocked_fetch.assert_called_once()
+        self.assertTrue(payload["ok"])
+        mocked_fetch.assert_not_called()
+        _, kwargs = mocked_query.call_args
+        self.assertIsNone(kwargs["field_ids"])
+        self.assertNotIn("excludedFields", payload["result"])
+
+    def test_query_records_input_json_includeHeavyFields_skips_auto_exclusion(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            input_path = Path(tmp_dir) / "q.json"
+            input_path.write_text(json.dumps({
+                "baseId": "base12345",
+                "tableId": "table12345",
+                "includeHeavyFields": True,
+            }, ensure_ascii=False), encoding="utf-8")
+
+            with patch.object(AITABLE_CLI, "fetch_light_field_ids") as mocked_fetch, patch.object(AITABLE_CLI, "safe_query_records", return_value={"records": []}) as mocked_query:
+                exit_code, payload = self.run_cli([
+                    "query-records",
+                    "--input", str(input_path),
+                ])
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(payload["ok"])
+        mocked_fetch.assert_not_called()
+        _, kwargs = mocked_query.call_args
+        self.assertIsNone(kwargs["field_ids"])
+        self.assertNotIn("excludedFields", payload["result"])
+
+    def test_query_records_input_json_include_heavy_fields_snake_case_skips_auto_exclusion(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            input_path = Path(tmp_dir) / "q.json"
+            input_path.write_text(json.dumps({
+                "baseId": "base12345",
+                "tableId": "table12345",
+                "include_heavy_fields": True,
+            }, ensure_ascii=False), encoding="utf-8")
+
+            with patch.object(AITABLE_CLI, "fetch_light_field_ids") as mocked_fetch, patch.object(AITABLE_CLI, "safe_query_records", return_value={"records": []}) as mocked_query:
+                exit_code, payload = self.run_cli([
+                    "query-records",
+                    "--input", str(input_path),
+                ])
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(payload["ok"])
+        mocked_fetch.assert_not_called()
         _, kwargs = mocked_query.call_args
         self.assertIsNone(kwargs["field_ids"])
         self.assertNotIn("excludedFields", payload["result"])
@@ -1015,6 +1089,60 @@ class TestHeavyFieldAutoExclusion(unittest.TestCase):
             payload["result"]["excludedFields"],
             [{"fieldId": "fld_pic", "fieldName": "图片", "type": "attachment"}],
         )
+
+
+class TestClientTruncationDetection(unittest.TestCase):
+    """client.py 会在 response 被 pipe buffer 截断时主动报 TruncatedResponseError。
+
+    JSONDecodeError.msg 保留原始双引号。必须能匹配 "Expecting ',' delimiter"，
+    不再被看作“普通 JSON 错误”。
+    """
+
+    def test_truncation_message_set_includes_comma_delimiter(self):
+        # client.py 中的 truncation 匹配集合必须包含 "Expecting ',' delimiter" 字面串。
+        # json.JSONDecodeError.msg 保留原始源里的双引号，不能写成单引号。
+        import ast
+        import dingtalk_ai_table.client as cli_mod
+        with open(cli_mod.__file__, "r", encoding="utf-8") as f:
+            source = f.read()
+        # 提取 client.py 中 "in (" 后的元组字面量
+        idx = source.find('exc.msg in (')
+        self.assertGreaterEqual(idx, 0, "client.py 应包含 truncation 匹配集")
+        end = source.find(')', idx)
+        snippet = source[idx + len('exc.msg in ('):end]
+        keywords = ast.literal_eval('(' + snippet + ')')
+        self.assertIn("Expecting ',' delimiter", keywords)
+
+    def test_truncation_message_actually_matches_python_json(self):
+        # 真正验证：构造一个 JSON 文本，让 Python 抛出 "Expecting ',' delimiter"。
+        # （"Expecting ',' delimiter" 在 Python 3.9 由两个连续 value 产生，msg 带双引号）
+        import json
+        try:
+            json.loads(b'{"a": 1 2}')
+        except json.JSONDecodeError as exc:
+            self.assertEqual(exc.msg, "Expecting ',' delimiter")
+
+    def test_pipe_buffer_truncation_raises_TruncatedResponseError(self):
+        # 真实 mcporter 响应在 ~64KB 处被截断，JSON 以 "Expecting ',' delimiter" 报错。
+        # client.py 必须能识别为截断，而不是当作“普通解析错误”丢掉。
+        from dingtalk_ai_table.client import TruncatedResponseError, run_mcporter
+        import dingtalk_ai_table.client as cli_mod
+
+        # 构造一个 65000+ 字节的 JSON 文本，触发 comma delimiter 错误。
+        # 两个连续 value 会产生 "Expecting ',' delimiter" 错误。
+        # 长度要 >= 55KB 才会被 client.py 的 truncation 检测识别（超过 pipe buffer 阈值）。
+        record = b'{"x":"' + b'Y' * 500 + b'"},'
+        bad_json = b'{"data":{"records":[' + record * 110 + b' 1 2 3'  # ~56KB 字节
+
+        with patch.object(cli_mod, "build_mcporter_env", return_value={}), \
+             patch("subprocess.run") as mocked_run:
+            mocked_run.return_value = SimpleNamespace(
+                returncode=0,
+                stdout=bad_json,
+                stderr=b'',
+            )
+            with self.assertRaises(TruncatedResponseError):
+                run_mcporter(["query_records", "--args", "{}"])
 
 
 if __name__ == "__main__":

@@ -62,11 +62,12 @@ python scripts/aitable.py query-records --include-heavy-fields ...
 大批量统计 / 导出时，**优先显式指定只需要的字段**：
 
 ```bash
-python scripts/aitable.py query-records --field-id 日期 --field-id SKU ...
+python scripts/aitable.py query-records --field-id fld_date --field-id fld_sku ...
 ```
 
 只读必要字段，体积最小、最稳定，避开 pipe buffer 和上下文问题。
 一旦显式传了 `--field-id`，**不再自动排除重字段**——用户表达“我只要这些”，就以用户为准。
+如果手上只有字段名（如 `日期` / `SKU`），先用 `resolve-field` 拿到对应的 `fieldId` 再传进来。
 
 ### excludedFields 返回字段
 

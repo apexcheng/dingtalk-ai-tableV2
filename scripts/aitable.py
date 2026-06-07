@@ -281,23 +281,31 @@ def resolve_default_field_ids(
 ) -> Tuple[Optional[List[str]], List[Dict[str, Any]]]:
     """Return (field_ids, excluded_fields) for record-reading commands.
 
-    - If the user explicitly passed --field-id / input.fieldIds / input.field_ids,
-      do nothing. Respect the user.
-    - If --include-heavy-fields is set, do nothing. Respect the user.
-    - Otherwise, fetch the table schema, drop attachment / image / picture / file
-      fields, and return the light list plus the list of excluded fields.
-    - On any error or empty schema, return (None, []) so the caller still works
-      (MCP will return the default set of fields).
+    优先级：
+    1. 用户显式传了 --field-id / input.fieldIds / input.field_ids：尊重用户。
+    2. CLI --include-heavy-fields 或 input.includeHeavyFields / input.include_heavy_fields：
+       跳过自动过滤。
+    3. 否则：调 fetch_light_field_ids() 拉 schema、踢掉重字段。
+    fetch_light_field_ids() 在拿不到 schema 时会主动报错，不再静默回退。
     """
     user_field_ids = pick_list(args.field_id, data, "fieldIds", "field_ids")
     if user_field_ids:
         return user_field_ids, []
-    if getattr(args, "include_heavy_fields", False):
+    if _is_include_heavy_fields_set(args, data):
         return user_field_ids, []
     light, excluded = fetch_light_field_ids(base_id, table_id)
-    if not light:
-        return None, excluded
     return light, excluded
+
+
+def _is_include_heavy_fields_set(args: argparse.Namespace, data: Dict[str, Any]) -> bool:
+    """True iff the user opted into heavy fields (CLI > input JSON)."""
+    cli_value = getattr(args, "include_heavy_fields", None)
+    if cli_value:
+        return True
+    for key in ("includeHeavyFields", "include_heavy_fields"):
+        if data.get(key):
+            return True
+    return False
 
 
 def handle_query_records(args: argparse.Namespace) -> Any:

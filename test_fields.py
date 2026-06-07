@@ -147,17 +147,32 @@ class TestResolveLightFieldIds(unittest.TestCase):
         self.assertIn("fld_pic", [item["fieldId"] for item in excluded])
         self.assertNotIn("fld_pic", light)
 
-    def test_fetch_light_field_ids_returns_empty_on_get_tables_error(self):
+    def test_fetch_light_field_ids_raises_on_get_tables_error(self):
+        # 拉不到 schema 不能静默回退到全字段查询——会误返重字段。
         with patch("dingtalk_ai_table.fields.get_tables", side_effect=RuntimeError("network down")):
-            light, excluded = fetch_light_field_ids("base12345", "tbl_1")
-        self.assertEqual(light, [])
-        self.assertEqual(excluded, [])
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "无法获取字段结构，不能安全排除图片/附件字段",
+            ):
+                fetch_light_field_ids("base12345", "tbl_1")
 
-    def test_fetch_light_field_ids_returns_empty_on_empty_tables(self):
+    def test_fetch_light_field_ids_raises_on_empty_tables(self):
         with patch("dingtalk_ai_table.fields.get_tables", return_value={"tables": []}):
-            light, excluded = fetch_light_field_ids("base12345", "tbl_1")
-        self.assertEqual(light, [])
-        self.assertEqual(excluded, [])
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "无法获取字段结构，不能安全排除图片/附件字段",
+            ):
+                fetch_light_field_ids("base12345", "tbl_1")
+
+    def test_fetch_light_field_ids_raises_on_empty_fields(self):
+        with patch("dingtalk_ai_table.fields.get_tables", return_value={
+            "tables": [{"tableId": "tbl_1", "fields": []}],
+        }):
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "无法获取字段结构，不能安全排除图片/附件字段",
+            ):
+                fetch_light_field_ids("base12345", "tbl_1")
 
 
 if __name__ == "__main__":

@@ -83,11 +83,13 @@ def run_mcporter(args: List[str], timeout: int = 60) -> Any:
     except json.JSONDecodeError as exc:
         # Detect truncation at the OS pipe buffer boundary (64KB).
         # Signals: response near/at 65536 bytes + JSON fails mid-document.
+        # Note: json.JSONDecodeError.msg keeps the original source quotes,
+        # so 'Expecting ',' delimiter' is literally 'Expecting "," delimiter'.
         is_truncation = (
             len(stdout_bytes) >= 55000
             and exc.msg in (
                 'Unterminated string starting at',
-                'Expecting ',' delimiter',
+                'Expecting \',\' delimiter',
                 'Unterminated object',
                 'Invalid control character',
                 'Expecting property name enclosed in double quotes',
