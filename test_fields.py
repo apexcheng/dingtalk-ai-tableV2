@@ -1,7 +1,14 @@
 import unittest
 from unittest.mock import patch
 
-from dingtalk_ai_table.fields import get_table_by_name, list_bases, search_bases
+from dingtalk_ai_table.fields import (
+    HEAVY_FIELD_TYPES,
+    fetch_light_field_ids,
+    get_table_by_name,
+    list_bases,
+    resolve_light_field_ids,
+    search_bases,
+)
 
 
 class TestBaseQueryHelpers(unittest.TestCase):
@@ -84,6 +91,73 @@ class TestGetTableByName(unittest.TestCase):
         with patch("dingtalk_ai_table.fields.get_base", return_value=payload):
             with self.assertRaisesRegex(ValueError, "找到多个同名表，请人工确认"):
                 get_table_by_name("base12345", "评价收集表")
+
+
+class TestResolveLightFieldIds(unittest.TestCase):
+    SAMPLE_FIELDS = [
+        {"fieldId": "fld_text", "fieldName": "订单号", "type": "text"},
+        {"fieldId": "fld_pic", "fieldName": "图片", "type": "attachment"},
+        {"fieldId": "fld_date", "fieldName": "评价时间", "type": "date"},
+        {"fieldId": "fld_sel", "fieldName": "店铺", "type": "singleSelect"},
+        {"fieldId": "fld_image", "fieldName": "图片集", "type": "image"},
+        {"fieldId": "fld_picture", "fieldName": "封面图", "type": "picture"},
+        {"fieldId": "fld_file", "fieldName": "附件", "type": "file"},
+        {"fieldId": "fld_rich", "fieldName": "备注", "type": "richText"},
+        {"fieldId": "fld_unk", "fieldName": "未知类型字段", "type": "未知类型"},
+        {"fieldId": "fld_no_type", "fieldName": "无 type 字段"},
+    ]
+
+    def test_heavy_types_constant(self):
+        self.assertEqual(HEAVY_FIELD_TYPES, {"attachment", "image", "picture", "file"})
+
+    def test_resolve_splits_heavy_and_light(self):
+        light, excluded = resolve_light_field_ids(self.SAMPLE_FIELDS)
+        self.assertEqual(light, [
+            "fld_text", "fld_date", "fld_sel", "fld_rich", "fld_unk", "fld_no_type",
+        ])
+        excluded_ids = [item["fieldId"] for item in excluded]
+        self.assertEqual(excluded_ids, ["fld_pic", "fld_image", "fld_picture", "fld_file"])
+        # unknown / missing type 默认为轻字段
+        self.assertNotIn("fld_unk", excluded_ids)
+        self.assertNotIn("fld_no_type", excluded_ids)
+        for item in excluded:
+            self.assertIn("fieldId", item)
+            self.assertIn("fieldName", item)
+            self.assertIn("type", item)
+            self.assertIn(item["type"], HEAVY_FIELD_TYPES)
+
+    def test_empty_input(self):
+        light, excluded = resolve_light_field_ids([])
+        self.assertEqual(light, [])
+        self.assertEqual(excluded, [])
+
+    def test_skips_non_dict_entries(self):
+        light, excluded = resolve_light_field_ids([None, "str", 123, {"fieldId": "ok", "type": "text"}])
+        self.assertEqual(light, ["ok"])
+        self.assertEqual(excluded, [])
+
+    def test_fetch_light_field_ids_calls_get_tables(self):
+        with patch("dingtalk_ai_table.fields.get_tables", return_value={
+            "tables": [
+                {"tableId": "tbl_1", "fields": self.SAMPLE_FIELDS},
+            ]
+        }) as mocked:
+            light, excluded = fetch_light_field_ids("base12345", "tbl_1")
+        mocked.assert_called_once_with("base12345", ["tbl_1"])
+        self.assertIn("fld_pic", [item["fieldId"] for item in excluded])
+        self.assertNotIn("fld_pic", light)
+
+    def test_fetch_light_field_ids_returns_empty_on_get_tables_error(self):
+        with patch("dingtalk_ai_table.fields.get_tables", side_effect=RuntimeError("network down")):
+            light, excluded = fetch_light_field_ids("base12345", "tbl_1")
+        self.assertEqual(light, [])
+        self.assertEqual(excluded, [])
+
+    def test_fetch_light_field_ids_returns_empty_on_empty_tables(self):
+        with patch("dingtalk_ai_table.fields.get_tables", return_value={"tables": []}):
+            light, excluded = fetch_light_field_ids("base12345", "tbl_1")
+        self.assertEqual(light, [])
+        self.assertEqual(excluded, [])
 
 
 if __name__ == "__main__":

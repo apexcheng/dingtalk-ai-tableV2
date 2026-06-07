@@ -3,13 +3,13 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional, TextIO
+from typing import Any, Dict, List, Optional, TextIO, Tuple
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from dingtalk_ai_table.fields import create_fields, get_base, get_fields, get_tables, list_bases, search_bases
+from dingtalk_ai_table.fields import create_fields, fetch_light_field_ids, get_base, get_fields, get_tables, list_bases, search_bases
 from dingtalk_ai_table.filters import and_filter, date_eq_filter, eq_filter, iter_date_values, ne_filter, or_filter
 from dingtalk_ai_table.guards import validate_filter_tree
 from dingtalk_ai_table.records import extract_records
@@ -273,6 +273,33 @@ def handle_build_filter(args: argparse.Namespace) -> Any:
     return build_filter_from_args(args, data)
 
 
+def resolve_default_field_ids(
+    args: argparse.Namespace,
+    data: Dict[str, Any],
+    base_id: str,
+    table_id: str,
+) -> Tuple[Optional[List[str]], List[Dict[str, Any]]]:
+    """Return (field_ids, excluded_fields) for record-reading commands.
+
+    - If the user explicitly passed --field-id / input.fieldIds / input.field_ids,
+      do nothing. Respect the user.
+    - If --include-heavy-fields is set, do nothing. Respect the user.
+    - Otherwise, fetch the table schema, drop attachment / image / picture / file
+      fields, and return the light list plus the list of excluded fields.
+    - On any error or empty schema, return (None, []) so the caller still works
+      (MCP will return the default set of fields).
+    """
+    user_field_ids = pick_list(args.field_id, data, "fieldIds", "field_ids")
+    if user_field_ids:
+        return user_field_ids, []
+    if getattr(args, "include_heavy_fields", False):
+        return user_field_ids, []
+    light, excluded = fetch_light_field_ids(base_id, table_id)
+    if not light:
+        return None, excluded
+    return light, excluded
+
+
 def handle_query_records(args: argparse.Namespace) -> Any:
     data = ensure_dict_input(load_input_data(args.input))
     base_id = require_value(pick_scalar(args.base_id, data, "baseId", "base_id"), "baseId")
@@ -285,6 +312,7 @@ def handle_query_records(args: argparse.Namespace) -> Any:
     sort = pick_scalar(args.sort_json, data, "sort")
     if isinstance(sort, str):
         sort = parse_json_text(sort, "--sort-json")
+    field_ids, excluded_fields = resolve_default_field_ids(args, data, base_id, table_id)
 
     result = safe_query_records(
         base_id=base_id,
@@ -293,7 +321,7 @@ def handle_query_records(args: argparse.Namespace) -> Any:
         filters=filters,
         keyword=pick_scalar(args.keyword, data, "keyword"),
         sort=sort,
-        field_ids=pick_list(args.field_id, data, "fieldIds", "field_ids"),
+        field_ids=field_ids,
         limit=pick_scalar(args.limit, data, "limit"),
         cursor=pick_scalar(args.cursor, data, "cursor"),
     )
@@ -315,6 +343,9 @@ def handle_query_records(args: argparse.Namespace) -> Any:
                 summary["hasMore"] = data_obj["hasMore"]
             if "nextCursor" in data_obj:
                 summary["nextCursor"] = data_obj["nextCursor"]
+
+    if excluded_fields:
+        summary["excludedFields"] = excluded_fields
 
     if output_path:
         resolved_output_path = resolve_output_path(output_path)
@@ -444,6 +475,7 @@ def handle_process_records_with_marker(args: argparse.Namespace) -> Any:
     sort = pick_scalar(args.sort_json, data, "sort")
     if isinstance(sort, str):
         sort = parse_json_text(sort, "--sort-json")
+    field_ids, excluded_fields = resolve_default_field_ids(args, data, base_id, table_id)
     output_path = require_value(pick_scalar(args.output, data, "output"), "output")
     preview = pick_scalar(args.preview, data, "preview", default=3)
 
@@ -469,13 +501,16 @@ def handle_process_records_with_marker(args: argparse.Namespace) -> Any:
                 preview=preview,
                 filters=filters,
                 sort=sort,
-                field_ids=pick_list(args.field_id, data, "fieldIds", "field_ids"),
+                field_ids=field_ids,
                 keyword=pick_scalar(args.keyword, data, "keyword"),
             )
-            return {
+            payload = {
                 "output": str(resolved_output_path),
                 "summary": summary,
             }
+            if excluded_fields:
+                payload["excludedFields"] = excluded_fields
+            return payload
 
         summary, process_batch = build_marker_process_summary(
             action=action,
@@ -491,16 +526,19 @@ def handle_process_records_with_marker(args: argparse.Namespace) -> Any:
             process_batch=process_batch,
             filters=filters,
             sort=sort,
-            field_ids=pick_list(args.field_id, data, "fieldIds", "field_ids"),
+            field_ids=field_ids,
             keyword=pick_scalar(args.keyword, data, "keyword"),
             task_name=pick_scalar(args.task_name, data, "taskName", "task_name", default="batch_task"),
             readonly=pick_scalar(args.readonly, data, "readonly", default=False),
         )
-    return {
+    payload = {
         "taskMarker": task_marker,
         "output": str(resolved_output_path),
         "summary": summary,
     }
+    if excluded_fields:
+        payload["excludedFields"] = excluded_fields
+    return payload
 
 
 def handle_process_date_range_with_marker(args: argparse.Namespace) -> Any:
@@ -534,7 +572,7 @@ def handle_process_date_range_with_marker(args: argparse.Namespace) -> Any:
     resolved_output_dir = resolve_output_path(str(Path(output_dir) / "placeholder.jsonl")).parent
     task_name = pick_scalar(args.task_name, data, "taskName", "task_name", default="date_range_task")
     readonly = pick_scalar(args.readonly, data, "readonly", default=False)
-    field_ids = pick_list(args.field_id, data, "fieldIds", "field_ids")
+    field_ids, excluded_fields = resolve_default_field_ids(args, data, base_id, table_id)
     keyword = pick_scalar(args.keyword, data, "keyword")
 
     all_results = []
@@ -594,11 +632,14 @@ def handle_process_date_range_with_marker(args: argparse.Namespace) -> Any:
             day_result["taskMarker"] = task_marker
         all_results.append(day_result)
 
-    return {
+    payload = {
         "outputDir": str(resolved_output_dir),
         "results": all_results,
         "summary": total_summary,
     }
+    if excluded_fields:
+        payload["excludedFields"] = excluded_fields
+    return payload
 
 
 def handle_prepare_attachment_upload(args: argparse.Namespace) -> Any:
@@ -630,6 +671,12 @@ def add_query_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--field-id", action="append", default=None)
     parser.add_argument("--keyword")
     parser.add_argument("--preview", type=int, default=None)
+    parser.add_argument(
+        "--include-heavy-fields",
+        action="store_true",
+        default=None,
+        help="显式保留图片/附件等重字段，默认会自动排除",
+    )
 
 
 def add_process_arguments(parser: argparse.ArgumentParser) -> None:

@@ -832,5 +832,190 @@ class TestCli(unittest.TestCase):
         self.assertNotIn(input_filter, captured_filters[0]["operands"])
 
 
+class TestHeavyFieldAutoExclusion(unittest.TestCase):
+    """query-records / process-* 默认从 get_tables 拉字段表，剔除 attachment / image / picture / file。"""
+
+    def run_cli(self, argv):
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            exit_code = AITABLE_CLI.main(argv)
+        return exit_code, json.loads(stdout.getvalue().strip())
+
+    SAMPLE_FIELDS = [
+        {"fieldId": "fld_text", "fieldName": "订单号", "type": "text"},
+        {"fieldId": "fld_pic", "fieldName": "图片", "type": "attachment"},
+        {"fieldId": "fld_date", "fieldName": "评价时间", "type": "date"},
+        {"fieldId": "fld_image", "fieldName": "图片集", "type": "image"},
+    ]
+
+    def test_query_records_auto_excludes_heavy_fields(self):
+        with patch.object(AITABLE_CLI, "fetch_light_field_ids", return_value=(
+            ["fld_text", "fld_date"],
+            [{"fieldId": "fld_pic", "fieldName": "图片", "type": "attachment"}],
+        )) as mocked_fetch, patch.object(AITABLE_CLI, "safe_query_records", return_value={"records": []}) as mocked_query:
+            exit_code, payload = self.run_cli([
+                "query-records",
+                "--base-id", "base12345",
+                "--table-id", "table12345",
+            ])
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(payload["ok"])
+        mocked_fetch.assert_called_once_with("base12345", "table12345")
+        _, kwargs = mocked_query.call_args
+        self.assertEqual(kwargs["field_ids"], ["fld_text", "fld_date"])
+        self.assertEqual(
+            payload["result"]["excludedFields"],
+            [{"fieldId": "fld_pic", "fieldName": "图片", "type": "attachment"}],
+        )
+
+    def test_query_records_user_field_ids_skips_auto_exclusion(self):
+        with patch.object(AITABLE_CLI, "fetch_light_field_ids") as mocked_fetch, patch.object(AITABLE_CLI, "safe_query_records", return_value={"records": []}) as mocked_query:
+            exit_code, payload = self.run_cli([
+                "query-records",
+                "--base-id", "base12345",
+                "--table-id", "table12345",
+                "--field-id", "fld_pic",
+                "--field-id", "fld_date",
+            ])
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(payload["ok"])
+        mocked_fetch.assert_not_called()
+        _, kwargs = mocked_query.call_args
+        self.assertEqual(kwargs["field_ids"], ["fld_pic", "fld_date"])
+        self.assertNotIn("excludedFields", payload["result"])
+
+    def test_query_records_input_field_ids_skips_auto_exclusion(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            input_path = Path(tmp_dir) / "q.json"
+            input_path.write_text(json.dumps({
+                "baseId": "base12345",
+                "tableId": "table12345",
+                "fieldIds": ["fld_pic"],
+            }, ensure_ascii=False), encoding="utf-8")
+
+            with patch.object(AITABLE_CLI, "fetch_light_field_ids") as mocked_fetch, patch.object(AITABLE_CLI, "safe_query_records", return_value={"records": []}) as mocked_query:
+                exit_code, payload = self.run_cli([
+                    "query-records",
+                    "--input", str(input_path),
+                ])
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(payload["ok"])
+        mocked_fetch.assert_not_called()
+        _, kwargs = mocked_query.call_args
+        self.assertEqual(kwargs["field_ids"], ["fld_pic"])
+
+    def test_query_records_include_heavy_fields_skips_auto_exclusion(self):
+        with patch.object(AITABLE_CLI, "fetch_light_field_ids") as mocked_fetch, patch.object(AITABLE_CLI, "safe_query_records", return_value={"records": []}) as mocked_query:
+            exit_code, payload = self.run_cli([
+                "query-records",
+                "--base-id", "base12345",
+                "--table-id", "table12345",
+                "--include-heavy-fields",
+            ])
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(payload["ok"])
+        mocked_fetch.assert_not_called()
+        _, kwargs = mocked_query.call_args
+        self.assertIsNone(kwargs["field_ids"])
+        self.assertNotIn("excludedFields", payload["result"])
+
+    def test_query_records_get_tables_failure_falls_back_to_all_fields(self):
+        with patch.object(AITABLE_CLI, "fetch_light_field_ids", return_value=([], [])) as mocked_fetch, patch.object(AITABLE_CLI, "safe_query_records", return_value={"records": []}) as mocked_query:
+            exit_code, payload = self.run_cli([
+                "query-records",
+                "--base-id", "base12345",
+                "--table-id", "table12345",
+            ])
+
+        self.assertEqual(exit_code, 0)
+        mocked_fetch.assert_called_once()
+        _, kwargs = mocked_query.call_args
+        self.assertIsNone(kwargs["field_ids"])
+        self.assertNotIn("excludedFields", payload["result"])
+
+    def test_process_records_with_marker_auto_excludes_heavy_fields(self):
+        def fake_process_records_with_marker(**kwargs):
+            kwargs["process_batch"]([])
+            return "task_marker_heavy"
+
+        with patch.object(AITABLE_CLI, "fetch_light_field_ids", return_value=(
+            ["fld_date"],
+            [{"fieldId": "fld_pic", "fieldName": "图片", "type": "attachment"}],
+        )), patch.object(AITABLE_CLI, "process_records_with_marker", side_effect=fake_process_records_with_marker) as mocked_process:
+            exit_code, payload = self.run_cli([
+                "process-records-with-marker",
+                "--base-id", "base12345",
+                "--table-id", "table12345",
+                "--filters-json", '{"operator":"date_eq","operands":["fld_date","2026-06-03"]}',
+                "--output", "/tmp/heavy_marker.jsonl",
+            ])
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(payload["ok"])
+        _, kwargs = mocked_process.call_args
+        self.assertEqual(kwargs["field_ids"], ["fld_date"])
+        self.assertEqual(
+            payload["result"]["excludedFields"],
+            [{"fieldId": "fld_pic", "fieldName": "图片", "type": "attachment"}],
+        )
+
+    def test_process_records_with_marker_include_heavy_fields_skips_auto_exclusion(self):
+        def fake_process_records_with_marker(**kwargs):
+            kwargs["process_batch"]([])
+            return "task_marker_full"
+
+        with patch.object(AITABLE_CLI, "fetch_light_field_ids") as mocked_fetch, patch.object(AITABLE_CLI, "process_records_with_marker", side_effect=fake_process_records_with_marker) as mocked_process:
+            exit_code, payload = self.run_cli([
+                "process-records-with-marker",
+                "--base-id", "base12345",
+                "--table-id", "table12345",
+                "--filters-json", '{"operator":"date_eq","operands":["fld_date","2026-06-03"]}',
+                "--output", "/tmp/heavy_marker.jsonl",
+                "--include-heavy-fields",
+            ])
+
+        self.assertEqual(exit_code, 0)
+        mocked_fetch.assert_not_called()
+        _, kwargs = mocked_process.call_args
+        self.assertIsNone(kwargs["field_ids"])
+        self.assertNotIn("excludedFields", payload["result"])
+
+    def test_process_date_range_with_marker_auto_excludes_heavy_fields(self):
+        captured = []
+
+        def fake_process_records_with_marker(**kwargs):
+            captured.append(kwargs["field_ids"])
+            kwargs["process_batch"]([])
+            return "task_marker_date"
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_dir = Path(tmp_dir) / "daily"
+            with patch.object(AITABLE_CLI, "fetch_light_field_ids", return_value=(
+                ["fld_date"],
+                [{"fieldId": "fld_pic", "fieldName": "图片", "type": "attachment"}],
+            )), patch.object(AITABLE_CLI, "process_records_with_marker", side_effect=fake_process_records_with_marker):
+                exit_code, payload = self.run_cli([
+                    "process-date-range-with-marker",
+                    "--base-id", "base12345",
+                    "--table-id", "table12345",
+                    "--date-field-id", "fld_date",
+                    "--start-date", "2026-06-03",
+                    "--end-date", "2026-06-03",
+                    "--output-dir", str(output_dir),
+                ])
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(captured, [["fld_date"]])
+        self.assertEqual(
+            payload["result"]["excludedFields"],
+            [{"fieldId": "fld_pic", "fieldName": "图片", "type": "attachment"}],
+        )
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

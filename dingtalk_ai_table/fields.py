@@ -23,6 +23,62 @@ FIELD_TYPE_ALIASES = {
     "phone": "telephone",
 }
 
+# 字段类型默认为重字段（图片/附件/文件等），默认不查询。
+# 未知 / 缺失 type 视为轻字段，不误删。
+HEAVY_FIELD_TYPES = {"attachment", "image", "picture", "file"}
+
+
+def resolve_light_field_ids(
+    fields: List[Dict[str, Any]],
+) -> Tuple[List[str], List[Dict[str, Any]]]:
+    """Split a field summary list into light fieldIds and excluded heavy fields.
+
+    返回 (light_field_ids, excluded_fields)：
+    - light_field_ids: 保留用于查询的 fieldId 列表（按输入顺序）。
+    - excluded_fields: 被跳过的重字段，元素为 {fieldId, fieldName, type}。
+
+    规则：type 明确在 HEAVY_FIELD_TYPES 内的字段被排除；
+    type 未知 / 缺失 / 其它 全部保留，宁可多返回也不误删。
+    """
+    light: List[str] = []
+    excluded: List[Dict[str, Any]] = []
+    for field in fields:
+        if not isinstance(field, dict):
+            continue
+        field_type = field.get("type")
+        if field_type in HEAVY_FIELD_TYPES:
+            excluded.append({
+                "fieldId": field.get("fieldId") or field.get("id"),
+                "fieldName": field.get("fieldName") or field.get("name"),
+                "type": field_type,
+            })
+            continue
+        field_id = field.get("fieldId") or field.get("id")
+        if field_id:
+            light.append(field_id)
+    return light, excluded
+
+
+def fetch_light_field_ids(
+    base_id: str,
+    table_id: str,
+) -> Tuple[List[str], List[Dict[str, Any]]]:
+    """通过 get_tables 拉字段摘要，拆出轻字段与被跳过的重字段。
+
+    任何 get_tables 异常 / 表结构为空都会返回 ([], [])，让调用方走“全字段”默认行为。
+    """
+    try:
+        tables_result = get_tables(base_id, [table_id])
+    except Exception:
+        return [], []
+    tables = _extract_tables(tables_result)
+    if not tables:
+        return [], []
+    fields = tables[0].get("fields") or []
+    if not isinstance(fields, list):
+        return [], []
+    return resolve_light_field_ids(fields)
+
 
 def normalize_field_config(field: Dict[str, Any]) -> Dict[str, Any]:
     normalized = dict(field)
