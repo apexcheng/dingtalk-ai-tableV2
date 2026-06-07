@@ -32,6 +32,57 @@ python scripts/aitable.py <subcommand> ...
 - `update-records` 当前不会用来清空字段
 - `process-date-range-with-marker` 的日期范围最大 `366` 天
 
+## 重字段自动过滤
+
+`query-records` / `process-records-with-marker` / `process-date-range-with-marker`
+**默认会自动排除 `attachment` / `image` / `picture` / `file` 这几类重字段**。
+
+原因：这些字段的 cell 通常是 base64 / 远程文件 URL，单条就能几 MB。
+不踢掉会同时搞坏三件事：
+
+1. 输出体积爆炸（一个 base64 图片就远大于上下文窗口）
+2. MCP 响应超过 stdout pipe buffer (64KB) → JSON 被截断 → 解析报错
+3. Agent 拿到巨大的 cell，毫无用处还占上下文
+
+被默认排除不等于字段不存在，只是本次查询不返回。
+
+### 拿回重字段
+
+确认需要图片 / 附件时，显式打开：
+
+```bash
+python scripts/aitable.py query-records --include-heavy-fields ...
+```
+
+`--include-heavy-fields` 适用于 `query-records` / `process-records-with-marker` /
+`process-date-range-with-marker` 三个命令。
+
+### 最佳实践：显式传 `--field-id`
+
+大批量统计 / 导出时，**优先显式指定只需要的字段**：
+
+```bash
+python scripts/aitable.py query-records --field-id 日期 --field-id SKU ...
+```
+
+只读必要字段，体积最小、最稳定，避开 pipe buffer 和上下文问题。
+一旦显式传了 `--field-id`，**不再自动排除重字段**——用户表达“我只要这些”，就以用户为准。
+
+### excludedFields 返回字段
+
+三个命令的结果中多了一个 `excludedFields` 字段，列出本次被默认跳过的字段：
+
+```json
+{
+  "excludedFields": [
+    { "fieldId": "ycDADsx", "fieldName": "图片", "type": "attachment" }
+  ]
+}
+```
+
+- 只在“触发了自动排除”的时候才出现；显式传 `--field-id` 或传了 `--include-heavy-fields` 时不出现
+- 只看这个字段就能知道“哪些字段被默认跳过”，不用去猜
+
 ## CLI 子命令
 
 - `get-base`
