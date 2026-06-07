@@ -483,6 +483,12 @@ def handle_process_records_with_marker(args: argparse.Namespace) -> Any:
     sort = pick_scalar(args.sort_json, data, "sort")
     if isinstance(sort, str):
         sort = parse_json_text(sort, "--sort-json")
+    if sort is not None:
+        raise CliError(
+            "process-records-with-marker 不支持 sort。"
+            "marker 会修改结果集，排序分页可能导致重复或漏数据。"
+            "请只传 filters，并把排序放到调用方下层处理。"
+        )
     field_ids, excluded_fields = resolve_default_field_ids(args, data, base_id, table_id)
     output_path = require_value(pick_scalar(args.output, data, "output"), "output")
     preview = pick_scalar(args.preview, data, "preview", default=3)
@@ -496,8 +502,8 @@ def handle_process_records_with_marker(args: argparse.Namespace) -> Any:
     if action == "delete" and filters is None:
         raise CliError("action=delete 时必须提供 filters，禁止无条件批量删除")
 
-    if action != "delete" and filters is None and sort is None:
-        raise CliError("process-records-with-marker 仅适用于带 filters 或 sort 的场景；无过滤条件不要使用")
+    if action != "delete" and filters is None:
+        raise CliError("process-records-with-marker 仅适用于带 filters 的场景；无过滤条件不要使用")
 
     resolved_output_path = resolve_output_path(output_path)
     with resolved_output_path.open("w", encoding="utf-8") as output_file:
@@ -567,6 +573,12 @@ def handle_process_date_range_with_marker(args: argparse.Namespace) -> Any:
     sort = pick_scalar(args.sort_json, data, "sort")
     if isinstance(sort, str):
         sort = parse_json_text(sort, "--sort-json")
+    if sort is not None:
+        raise CliError(
+            "process-date-range-with-marker 不支持 sort。"
+            "marker 会修改结果集，排序分页可能导致重复或漏数据。"
+            "请去掉 sort，按日期推进分页。"
+        )
     output_dir = require_value(pick_scalar(args.output_dir, data, "outputDir", "output_dir"), "outputDir")
     preview = pick_scalar(args.preview, data, "preview", default=3)
 

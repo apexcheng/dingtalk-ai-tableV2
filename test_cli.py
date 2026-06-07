@@ -316,7 +316,7 @@ class TestCli(unittest.TestCase):
         self.assertEqual(exit_code, 1)
         self.assertFalse(payload["ok"])
         self.assertEqual(payload["error"]["type"], "CliError")
-        self.assertIn("process-records-with-marker 仅适用于带 filters 或 sort 的场景；无过滤条件不要使用", payload["error"]["message"])
+        self.assertIn("process-records-with-marker 仅适用于带 filters 的场景；无过滤条件不要使用", payload["error"]["message"])
         self.assertFalse(file_exists)
 
     def test_resolve_table_returns_unique_match(self):
@@ -1143,6 +1143,105 @@ class TestClientTruncationDetection(unittest.TestCase):
             )
             with self.assertRaises(TruncatedResponseError):
                 run_mcporter(["query_records", "--args", "{}"])
+
+
+class TestMarkerSortForbidden(unittest.TestCase):
+    """marker 系列命令禁止 sort——marker 回写会修改结果集，造成排序分页重复 / 漏数据。"""
+
+    def run_cli(self, argv):
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            exit_code = AITABLE_CLI.main(argv)
+        return exit_code, json.loads(stdout.getvalue().strip())
+
+    def test_process_records_with_marker_rejects_cli_sort_json(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            input_path = Path(tmp_dir) / "p.json"
+            output_path = Path(tmp_dir) / "p.jsonl"
+            input_path.write_text(json.dumps({
+                "baseId": "base12345",
+                "tableId": "table12345",
+                "filters": {"operator": "date_eq", "operands": ["fld_date", "2026-06-03"]},
+                "output": str(output_path),
+            }, ensure_ascii=False), encoding="utf-8")
+
+            with patch.object(AITABLE_CLI, "process_records_with_marker") as mocked_process:
+                exit_code, payload = self.run_cli([
+                    "process-records-with-marker",
+                    "--input", str(input_path),
+                    "--sort-json", '[{"fieldId":"fld_date","direction":"ASC"}]',
+                ])
+
+        self.assertEqual(exit_code, 1)
+        self.assertFalse(payload["ok"])
+        self.assertIn("process-records-with-marker 不支持 sort", payload["error"]["message"])
+        self.assertIn("重复或漏数据", payload["error"]["message"])
+        mocked_process.assert_not_called()
+
+    def test_process_records_with_marker_rejects_input_json_sort(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            input_path = Path(tmp_dir) / "p.json"
+            output_path = Path(tmp_dir) / "p.jsonl"
+            input_path.write_text(json.dumps({
+                "baseId": "base12345",
+                "tableId": "table12345",
+                "filters": {"operator": "date_eq", "operands": ["fld_date", "2026-06-03"]},
+                "output": str(output_path),
+                "sort": [{"fieldId": "fld_date", "direction": "ASC"}],
+            }, ensure_ascii=False), encoding="utf-8")
+
+            with patch.object(AITABLE_CLI, "process_records_with_marker") as mocked_process:
+                exit_code, payload = self.run_cli([
+                    "process-records-with-marker",
+                    "--input", str(input_path),
+                ])
+
+        self.assertEqual(exit_code, 1)
+        self.assertFalse(payload["ok"])
+        self.assertIn("process-records-with-marker 不支持 sort", payload["error"]["message"])
+        mocked_process.assert_not_called()
+
+    def test_process_date_range_with_marker_rejects_cli_sort_json(self):
+        with patch.object(AITABLE_CLI, "process_records_with_marker") as mocked_process:
+            exit_code, payload = self.run_cli([
+                "process-date-range-with-marker",
+                "--base-id", "base12345",
+                "--table-id", "table12345",
+                "--date-field-id", "fld_date",
+                "--start-date", "2026-06-01",
+                "--end-date", "2026-06-01",
+                "--output-dir", "/tmp/sort_reject_test",
+                "--sort-json", '[{"fieldId":"fld_date","direction":"ASC"}]',
+            ])
+
+        self.assertEqual(exit_code, 1)
+        self.assertFalse(payload["ok"])
+        self.assertIn("process-date-range-with-marker 不支持 sort", payload["error"]["message"])
+        self.assertIn("重复或漏数据", payload["error"]["message"])
+        mocked_process.assert_not_called()
+
+    def test_process_date_range_with_marker_rejects_input_json_sort(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            input_path = Path(tmp_dir) / "pdr.json"
+            input_path.write_text(json.dumps({
+                "sort": [{"fieldId": "fld_date", "direction": "ASC"}],
+            }, ensure_ascii=False), encoding="utf-8")
+            with patch.object(AITABLE_CLI, "process_records_with_marker") as mocked_process:
+                exit_code, payload = self.run_cli([
+                    "process-date-range-with-marker",
+                    "--base-id", "base12345",
+                    "--table-id", "table12345",
+                    "--date-field-id", "fld_date",
+                    "--start-date", "2026-06-01",
+                    "--end-date", "2026-06-01",
+                    "--output-dir", "/tmp/sort_reject_test2",
+                    "--input", str(input_path),
+                ])
+
+        self.assertEqual(exit_code, 1)
+        self.assertFalse(payload["ok"])
+        self.assertIn("process-date-range-with-marker 不支持 sort", payload["error"]["message"])
+        mocked_process.assert_not_called()
 
 
 if __name__ == "__main__":

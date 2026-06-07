@@ -29,6 +29,7 @@ python scripts/aitable.py <subcommand> ...
 - 不带 `filters` / `sort` 时可以使用 `cursor`
 - 带 `filters` 或 `sort` 时禁止使用 `cursor`
 - 带 `filters` / `sort` 且结果可能超过 `100` 条时，使用 `process-records-with-marker` 或 `process-date-range-with-marker`
+- `process-records-with-marker` / `process-date-range-with-marker` 都不支持 `sort`（marker 回写会改结果集，排序分页会造成重复和漏数据，只接受 `filters`）
 - `update-records` 当前不会用来清空字段
 - `process-date-range-with-marker` 的日期范围最大 `366` 天
 
