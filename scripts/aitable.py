@@ -277,7 +277,9 @@ def handle_query_records(args: argparse.Namespace) -> Any:
     data = ensure_dict_input(load_input_data(args.input))
     base_id = require_value(pick_scalar(args.base_id, data, "baseId", "base_id"), "baseId")
     table_id = require_value(pick_scalar(args.table_id, data, "tableId", "table_id"), "tableId")
-    filters = pick_scalar(args.filters_json, data, "filters")
+    filters = args.filters_json
+    if filters is None:
+        filters = data.get("filter") or data.get("filters")
     if isinstance(filters, str):
         filters = parse_json_text(filters, "--filters-json")
     sort = pick_scalar(args.sort_json, data, "sort")
@@ -434,7 +436,9 @@ def handle_process_records_with_marker(args: argparse.Namespace) -> Any:
     data = ensure_dict_input(load_input_data(args.input))
     base_id = require_value(pick_scalar(args.base_id, data, "baseId", "base_id"), "baseId")
     table_id = require_value(pick_scalar(args.table_id, data, "tableId", "table_id"), "tableId")
-    filters = pick_scalar(args.filters_json, data, "filters")
+    filters = args.filters_json
+    if filters is None:
+        filters = data.get("filter") or data.get("filters")
     if isinstance(filters, str):
         filters = parse_json_text(filters, "--filters-json")
     sort = pick_scalar(args.sort_json, data, "sort")
@@ -509,7 +513,9 @@ def handle_process_date_range_with_marker(args: argparse.Namespace) -> Any:
     )
     start_date = require_value(pick_scalar(args.start_date, data, "startDate", "start_date"), "startDate")
     end_date = require_value(pick_scalar(args.end_date, data, "endDate", "end_date"), "endDate")
-    filters = pick_scalar(args.filters_json, data, "filters")
+    filters = args.filters_json
+    if filters is None:
+        filters = data.get("filter") or data.get("filters")
     if isinstance(filters, str):
         filters = parse_json_text(filters, "--filters-json")
     sort = pick_scalar(args.sort_json, data, "sort")

@@ -507,6 +507,330 @@ class TestCli(unittest.TestCase):
         self.assertEqual(process_mock.call_count, 2)
         self.assertEqual(update_mock.call_count, 2)
 
+    def test_query_records_input_filter_singular_is_passed_as_filters(self):
+        filter_obj = {"operator": "eq", "operands": ["fld_1", "a"]}
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            input_path = Path(tmp_dir) / "query_filter.json"
+            input_path.write_text(
+                json.dumps(
+                    {
+                        "baseId": "base12345",
+                        "tableId": "table12345",
+                        "filter": filter_obj,
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            with patch.object(AITABLE_CLI, "safe_query_records", return_value={"records": []}) as mocked:
+                exit_code, payload = self.run_cli([
+                    "query-records",
+                    "--input", str(input_path),
+                ])
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(payload["ok"])
+        mocked.assert_called_once()
+        _, kwargs = mocked.call_args
+        self.assertEqual(kwargs["filters"], filter_obj)
+
+    def test_query_records_input_filters_plural_still_works(self):
+        filters_obj = {"operator": "eq", "operands": ["fld_1", "a"]}
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            input_path = Path(tmp_dir) / "query_filters.json"
+            input_path.write_text(
+                json.dumps(
+                    {
+                        "baseId": "base12345",
+                        "tableId": "table12345",
+                        "filters": filters_obj,
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            with patch.object(AITABLE_CLI, "safe_query_records", return_value={"records": []}) as mocked:
+                exit_code, payload = self.run_cli([
+                    "query-records",
+                    "--input", str(input_path),
+                ])
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(payload["ok"])
+        mocked.assert_called_once()
+        _, kwargs = mocked.call_args
+        self.assertEqual(kwargs["filters"], filters_obj)
+
+    def test_query_records_filters_json_overrides_input_filter(self):
+        input_filter = {"operator": "eq", "operands": ["fld_1", "a"]}
+        cli_filter = {"operator": "eq", "operands": ["fld_1", "b"]}
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            input_path = Path(tmp_dir) / "query_override.json"
+            input_path.write_text(
+                json.dumps(
+                    {
+                        "baseId": "base12345",
+                        "tableId": "table12345",
+                        "filter": input_filter,
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            with patch.object(AITABLE_CLI, "safe_query_records", return_value={"records": []}) as mocked:
+                exit_code, payload = self.run_cli([
+                    "query-records",
+                    "--input", str(input_path),
+                    "--filters-json", json.dumps(cli_filter, ensure_ascii=False),
+                ])
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(payload["ok"])
+        mocked.assert_called_once()
+        _, kwargs = mocked.call_args
+        self.assertEqual(kwargs["filters"], cli_filter)
+
+    def test_process_records_with_marker_input_filter_singular_is_passed_as_filters(self):
+        filter_obj = {"operator": "eq", "operands": ["fld_1", "a"]}
+
+        def fake_process_records_with_marker(**kwargs):
+            kwargs["process_batch"]([])
+            return "task_marker_filter_singular"
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            input_path = Path(tmp_dir) / "process_filter.json"
+            output_path = Path(tmp_dir) / "process_filter.jsonl"
+            input_path.write_text(
+                json.dumps(
+                    {
+                        "baseId": "base12345",
+                        "tableId": "table12345",
+                        "filter": filter_obj,
+                        "output": str(output_path),
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            with patch.object(AITABLE_CLI, "process_records_with_marker", side_effect=fake_process_records_with_marker) as mocked:
+                exit_code, payload = self.run_cli([
+                    "process-records-with-marker",
+                    "--input", str(input_path),
+                ])
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["result"]["taskMarker"], "task_marker_filter_singular")
+        mocked.assert_called_once()
+        _, kwargs = mocked.call_args
+        self.assertEqual(kwargs["filters"], filter_obj)
+
+    def test_process_records_with_marker_input_filters_plural_still_works(self):
+        filters_obj = {"operator": "eq", "operands": ["fld_1", "a"]}
+
+        def fake_process_records_with_marker(**kwargs):
+            kwargs["process_batch"]([])
+            return "task_marker_filters_plural"
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            input_path = Path(tmp_dir) / "process_filters.json"
+            output_path = Path(tmp_dir) / "process_filters.jsonl"
+            input_path.write_text(
+                json.dumps(
+                    {
+                        "baseId": "base12345",
+                        "tableId": "table12345",
+                        "filters": filters_obj,
+                        "output": str(output_path),
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            with patch.object(AITABLE_CLI, "process_records_with_marker", side_effect=fake_process_records_with_marker) as mocked:
+                exit_code, payload = self.run_cli([
+                    "process-records-with-marker",
+                    "--input", str(input_path),
+                ])
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["result"]["taskMarker"], "task_marker_filters_plural")
+        mocked.assert_called_once()
+        _, kwargs = mocked.call_args
+        self.assertEqual(kwargs["filters"], filters_obj)
+
+    def test_process_records_with_marker_filters_json_overrides_input_filter(self):
+        input_filter = {"operator": "eq", "operands": ["fld_1", "a"]}
+        cli_filter = {"operator": "eq", "operands": ["fld_1", "b"]}
+
+        def fake_process_records_with_marker(**kwargs):
+            kwargs["process_batch"]([])
+            return "task_marker_override"
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            input_path = Path(tmp_dir) / "process_override.json"
+            output_path = Path(tmp_dir) / "process_override.jsonl"
+            input_path.write_text(
+                json.dumps(
+                    {
+                        "baseId": "base12345",
+                        "tableId": "table12345",
+                        "filter": input_filter,
+                        "output": str(output_path),
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            with patch.object(AITABLE_CLI, "process_records_with_marker", side_effect=fake_process_records_with_marker) as mocked:
+                exit_code, payload = self.run_cli([
+                    "process-records-with-marker",
+                    "--input", str(input_path),
+                    "--filters-json", json.dumps(cli_filter, ensure_ascii=False),
+                ])
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["result"]["taskMarker"], "task_marker_override")
+        mocked.assert_called_once()
+        _, kwargs = mocked.call_args
+        self.assertEqual(kwargs["filters"], cli_filter)
+
+    def test_process_date_range_with_marker_input_filter_singular_is_passed_as_filters(self):
+        filter_obj = {"operator": "eq", "operands": ["fld_1", "a"]}
+        captured_filters = []
+
+        def fake_process_records_with_marker(**kwargs):
+            captured_filters.append(kwargs["filters"])
+            kwargs["process_batch"]([])
+            return "task_marker_date_filter"
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            input_path = Path(tmp_dir) / "date_range_filter.json"
+            input_path.write_text(
+                json.dumps(
+                    {
+                        "baseId": "base12345",
+                        "tableId": "table12345",
+                        "dateFieldId": "fld123456",
+                        "startDate": "2026-06-01",
+                        "endDate": "2026-06-01",
+                        "filter": filter_obj,
+                        "outputDir": tmp_dir,
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            with patch.object(AITABLE_CLI, "process_records_with_marker", side_effect=fake_process_records_with_marker):
+                exit_code, payload = self.run_cli([
+                    "process-date-range-with-marker",
+                    "--input", str(input_path),
+                ])
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(len(captured_filters), 1)
+        # base filter must be preserved and merged with the day filter via and_filter
+        outer_operator = captured_filters[0]["operator"]
+        self.assertEqual(outer_operator, "and")
+        # the user-supplied filter must appear among the operands
+        self.assertIn(filter_obj, captured_filters[0]["operands"])
+
+    def test_process_date_range_with_marker_input_filters_plural_still_works(self):
+        filters_obj = {"operator": "eq", "operands": ["fld_1", "a"]}
+        captured_filters = []
+
+        def fake_process_records_with_marker(**kwargs):
+            captured_filters.append(kwargs["filters"])
+            kwargs["process_batch"]([])
+            return "task_marker_date_filters"
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            input_path = Path(tmp_dir) / "date_range_filters.json"
+            input_path.write_text(
+                json.dumps(
+                    {
+                        "baseId": "base12345",
+                        "tableId": "table12345",
+                        "dateFieldId": "fld123456",
+                        "startDate": "2026-06-01",
+                        "endDate": "2026-06-01",
+                        "filters": filters_obj,
+                        "outputDir": tmp_dir,
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            with patch.object(AITABLE_CLI, "process_records_with_marker", side_effect=fake_process_records_with_marker):
+                exit_code, payload = self.run_cli([
+                    "process-date-range-with-marker",
+                    "--input", str(input_path),
+                ])
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(len(captured_filters), 1)
+        outer_operator = captured_filters[0]["operator"]
+        self.assertEqual(outer_operator, "and")
+        self.assertIn(filters_obj, captured_filters[0]["operands"])
+
+    def test_process_date_range_with_marker_filters_json_overrides_input_filter(self):
+        input_filter = {"operator": "eq", "operands": ["fld_1", "a"]}
+        cli_filter = {"operator": "eq", "operands": ["fld_1", "b"]}
+        captured_filters = []
+
+        def fake_process_records_with_marker(**kwargs):
+            captured_filters.append(kwargs["filters"])
+            kwargs["process_batch"]([])
+            return "task_marker_date_override"
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            input_path = Path(tmp_dir) / "date_range_override.json"
+            input_path.write_text(
+                json.dumps(
+                    {
+                        "baseId": "base12345",
+                        "tableId": "table12345",
+                        "dateFieldId": "fld123456",
+                        "startDate": "2026-06-01",
+                        "endDate": "2026-06-01",
+                        "filter": input_filter,
+                        "outputDir": tmp_dir,
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            with patch.object(AITABLE_CLI, "process_records_with_marker", side_effect=fake_process_records_with_marker):
+                exit_code, payload = self.run_cli([
+                    "process-date-range-with-marker",
+                    "--input", str(input_path),
+                    "--filters-json", json.dumps(cli_filter, ensure_ascii=False),
+                ])
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(len(captured_filters), 1)
+        outer_operator = captured_filters[0]["operator"]
+        self.assertEqual(outer_operator, "and")
+        self.assertIn(cli_filter, captured_filters[0]["operands"])
+        self.assertNotIn(input_filter, captured_filters[0]["operands"])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
